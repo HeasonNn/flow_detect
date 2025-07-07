@@ -43,3 +43,29 @@ public:
     const string &getDataPath() const { return data_path_; }
     void setDataPath(const string &path) { data_path_ = path; }
 };
+
+class CICIDSLoader : public DataLoader
+{
+public:
+    using DataLoader::DataLoader;
+
+    double parse_timestamp(const string& ts_str);
+    void load() override;
+};
+
+using binary_label_t = vector<bool>;
+
+class HyperVisonLoader : public DataLoader
+{
+private:
+    shared_ptr<vector<shared_ptr<basic_packet>>> parse_result_;
+    shared_ptr<vector<shared_ptr<tuple5_flow4>>> flow4_;
+    shared_ptr<vector<shared_ptr<tuple5_flow6>>> flow6_;
+    shared_ptr<binary_label_t> label_;
+
+public:
+    using DataLoader::DataLoader;
+
+    void load() override;
+    bool import_dataset();
+};
