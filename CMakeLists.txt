@@ -16,7 +16,8 @@ add_executable(flow_detector
     src/dataloader/cicids_loader.cpp
     src/dataloader/hypervison_loader.cpp
     src/flow_construct/explicit_constructor.cpp
-    src/detector/rfdetector.cpp
+    src/detector/rf_detector.cpp
+    src/detector/dbscan_detector.cpp
     src/detector/detector.cpp
 )
 

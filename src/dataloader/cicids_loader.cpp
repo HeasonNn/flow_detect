@@ -19,6 +19,7 @@ void CICIDSLoader::load() {
 
     __START_FTIMMER__
 
+
     std::ifstream file(data_path_);
     if (!file.is_open()) {
         FATAL_ERROR("Failed to open file: " + data_path_);
@@ -85,19 +86,19 @@ void CICIDSLoader::load() {
     train_data_ptr_->assign(all.begin(), all.begin() + train_size);
     test_data_ptr_->assign(all.begin() + train_size, all.end());
 
-    size_t count0 = 0, count1 = 0;
+    size_t benign_count = 0, attack_count = 0;
     for (const auto& p : all) {
-        p.second == 0 ? count0++ : count1++;
+        p.second == 0 ? benign_count++ : attack_count++;
     }
 
     __STOP_FTIMER__
     __PRINTF_EXE_TIME__
 
-    LOGF("Loaded total: %zu | Train: %zu | Test: %zu | BENIGN: %zu | ATTACK: %zu", 
+    LOGF("📦 Loaded total: %zu | Train: %zu | Test: %zu | BENIGN: %zu | ATTACK: %zu", 
         all.size(), 
         train_data_ptr_->size(), 
         test_data_ptr_->size(), 
-        count0, 
-        count1
+        benign_count, 
+        attack_count
     );
 }

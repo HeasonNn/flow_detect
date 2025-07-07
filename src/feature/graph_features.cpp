@@ -49,9 +49,9 @@ arma::vec GraphFeatureExtractor::extract(const std::string& src, const std::stri
     }
 
     arma::vec v(3);
-    v(0) = src_deg;   // 源节点的度数
-    v(1) = dst_deg;   // 目标节点的度数
-    v(2) = mutual;    // 共同邻居的数量
+    v(0) = src_deg;
+    v(1) = dst_deg;
+    v(2) = mutual;
     
     return v;
 }

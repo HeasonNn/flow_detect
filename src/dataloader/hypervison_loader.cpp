@@ -3,7 +3,6 @@
 
 bool HyperVisonLoader::import_dataset() 
 {
-    // ✅ Step 1: 尝试读取数据文件
     ifstream data_file(data_path_);
     if (!data_file) {
         cerr << "❌ Failed to open data file: " << data_path_ << "\n";
@@ -12,7 +11,6 @@ bool HyperVisonLoader::import_dataset()
 
     __START_FTIMMER__
 
-    // ✅ Step 2: 加载数据包行
     vector<string> packet_lines;
     string line;
     while (getline(data_file, line)) {
@@ -30,7 +28,6 @@ bool HyperVisonLoader::import_dataset()
     parse_result_ = make_shared<decltype(parse_result_)::element_type>(total_packets);
 
 
-    // ✅ Step 3: 多线程解析
     constexpr size_t kThreadCount = 24;
     const size_t chunk_size = (total_packets + kThreadCount - 1) / kThreadCount;
 
@@ -60,7 +57,6 @@ bool HyperVisonLoader::import_dataset()
     for (auto& t : threads)
         if (t.joinable()) t.join();
 
-    // ✅ Step 4: 加载标签
     ifstream label_file(label_path_);
     if (!label_file) {
         cerr << "❌ Failed to open label file: " << label_path_ << "\n";
@@ -100,8 +96,8 @@ void HyperVisonLoader::load()
     flow_constructor->construct_flow();
     flow4_ = flow_constructor->get_constructed_flow().first;
 
-    vector<pair<FlowRecord, size_t>> dataset;
-    dataset.reserve(flow4_->size());
+    vector<pair<FlowRecord, size_t>> all;
+    all.reserve(flow4_->size());
 
     for (const auto& flow : *flow4_) {
         const auto& [src_ip, dst_ip, src_port, dst_port, stack_code] = flow->flow_id;
@@ -119,21 +115,23 @@ void HyperVisonLoader::load()
         fr.bytes    = flow->get_flow_length();
 
         size_t label = flow->get_flow_label(label_);
-        dataset.emplace_back(fr, label);
+        all.emplace_back(fr, label);
     }
 
-    size_t train_size = static_cast<size_t>(train_ratio_ * dataset.size());
-    train_data_ptr_->assign(dataset.begin(), dataset.begin() + train_size);
-    test_data_ptr_->assign(dataset.begin() + train_size, dataset.end());
+    size_t train_size = static_cast<size_t>(train_ratio_ * all.size());
+    train_data_ptr_->assign(all.begin(), all.begin() + train_size);
+    test_data_ptr_->assign(all.begin() + train_size, all.end());
 
     size_t benign_count = 0, attack_count = 0;
-    for (const auto& [_, label] : dataset) {
+    for (const auto& [_, label] : all) {
         (label == 0) ? ++benign_count : ++attack_count;
     }
 
-    cout << "📦 Loaded total: " << dataset.size()
-         << " | Train: " << train_data_ptr_->size()
-         << " | Test: " << test_data_ptr_->size()
-         << " | BENIGN: " << benign_count
-         << " | ATTACK: " << attack_count << "\n";
+    LOGF("📦 Loaded total: %zu | Train: %zu | Test: %zu | BENIGN: %zu | ATTACK: %zu", 
+        all.size(), 
+        train_data_ptr_->size(), 
+        test_data_ptr_->size(), 
+        benign_count, 
+        attack_count
+    );
 }

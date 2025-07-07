@@ -11,12 +11,5 @@ arma::vec FlowFeatureExtractor::extract(const FlowRecord& flow) {
     v(4) = flow.packets;
     v(5) = avg_pkt;
 
-    // arma::vec v(5);
-    // v(0) = flow.src_port;
-    // v(1) = flow.dst_port;
-    // v(2) = flow.proto;
-    // v(3) = flow.packets;
-    // v(4) = avg_pkt;
-
     return v;
 }

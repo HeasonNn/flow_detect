@@ -8,15 +8,15 @@
 #include <chrono>
 #include <ctime>
 
-namespace fs = std::filesystem;
+namespace fs = filesystem;
 
-void RfDetector::addSample(const arma::vec& x, size_t label) {
+void RFDetector::addSample(const arma::vec& x, size_t label) {
     sample_vecs_.push_back(x);
     labels_.push_back(label);
 }
 
 
-void RfDetector::train() {
+void RFDetector::train() {
     if (trained_ || sample_vecs_.empty()) return;
 
     const size_t dim = sample_vecs_[0].n_elem;
@@ -30,66 +30,55 @@ void RfDetector::train() {
 }
 
 
-size_t RfDetector::predict(const arma::vec& x) {
+size_t RFDetector::predict(const arma::vec& x) {
     arma::Row<size_t> pred;
     rf_.Classify(x, pred);
     return pred(0);
 }
 
 
-void RfDetector::printFeatures(void) const
+void RFDetector::printFeatures(void) const noexcept
 {
     if (sample_vecs_.empty()) {
-        std::cout << "No features to print." << std::endl;
+        cout << "No features to print." << endl;
         return;
     }
 
-    std::cout << "Feature Vectors:" << std::endl;
-    std::cout << std::setw(8) << "Sample";
+    cout << "Feature Vectors:" << endl;
+    cout << setw(8) << "Sample";
 
     for (size_t i = 0; i < sample_vecs_[0].n_elem; ++i) {
-        std::cout << std::setw(12) << "Field " << i + 1;
+        cout << setw(12) << "Field " << i + 1;
     }
-    std::cout << std::endl;
+    cout << endl;
 
     for (size_t i = 0; i < sample_vecs_.size(); ++i)
     {
-        std::cout << std::setw(8) << "Sample " << i + 1;
+        cout << setw(8) << "Sample " << i + 1;
         for (size_t j = 0; j < sample_vecs_[i].n_elem; ++j) {
-            std::cout << std::setw(12) << sample_vecs_[i][j];
+            cout << setw(12) << sample_vecs_[i][j];
         }
-        std::cout << std::endl;
+        cout << endl;
     }
 }
 
-std::string get_current_time_str(void) {
-    auto now = std::chrono::system_clock::now();
-    auto now_time_t = std::chrono::system_clock::to_time_t(now);
-    
-    char buf[100];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", std::localtime(&now_time_t));
-    
-    return std::string(buf);
-}
 
-
-void RfDetector::run_detection(void)
+void RFDetector::run_detection(void)
 {
     const auto data_path = loader_->getDataPath();
     const auto test_flows = *loader_->getTestData();
-
     size_t TP = 0, TN = 0, FP = 0, FN = 0;
 
-    std::string current_time = get_current_time_str();
     // === 输出路径处理 ===
     fs::create_directory("result");
-    std::string base = fs::path(data_path).stem().string();  // 不含扩展名
-    std::string output_file = "result/" + base + "_pred_" + current_time + ".csv";
-    std::string metric_file = "result/" + base + "_metrics_" + current_time + ".txt";
-    std::ofstream ofs(output_file);
+    string current_time = get_current_time_str();
+    string base = fs::path(data_path).stem().string();  // 不含扩展名
+    string output_file = "result/" + base + "_pred_" + current_time + ".csv";
+    string metric_file = "result/" + base + "_metrics_" + current_time + ".txt";
+    ofstream ofs(output_file);
     ofs << "SrcIP,DstIP,Pred,Label\n";
 
-    std::cout << "\n🔎 Predicting:\n";
+    cout << "\n🔎 Predicting:\n";
 
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
@@ -118,24 +107,24 @@ void RfDetector::run_detection(void)
     double f1 = (precision + recall) ? 2 * precision * recall / (precision + recall) : 0.0;
     double f2 = (precision + recall) ? 5 * precision * recall / (4 * precision + recall) : 0.0;
 
-    std::cout << "\n📊 Evaluation Metrics:\n";
-    std::cout << "✅ Accuracy  : " << accuracy * 100 << "%\n";
-    std::cout << "🎯 Precision : " << precision * 100 << "%\n";
-    std::cout << "📥 Recall    : " << recall * 100 << "%\n";
-    std::cout << "📈 F1-Score  : " << f1 * 100 << "%\n";
-    std::cout << "📈 F2-Score  : " << f2 * 100 << "%\n";
+    cout << "\n📊 Evaluation Metrics:\n";
+    cout << "✅ Accuracy  : " << accuracy * 100 << "%\n";
+    cout << "🎯 Precision : " << precision * 100 << "%\n";
+    cout << "📥 Recall    : " << recall * 100 << "%\n";
+    cout << "📈 F1-Score  : " << f1 * 100 << "%\n";
+    cout << "📈 F2-Score  : " << f2 * 100 << "%\n";
 
-    std::cout << "\n📊 Confusion Matrix:\n";
-    std::cout << "             Predicted\n";
-    std::cout << "            0        1\n";
-    std::cout << "Actual 0 | " << std::setw(6) << TN << "  | " << std::setw(6) << FP << "\n";
-    std::cout << "Actual 1 | " << std::setw(6) << FN << "  | " << std::setw(6) << TP << "\n";
+    cout << "\n📊 Confusion Matrix:\n";
+    cout << "             Predicted\n";
+    cout << "            0        1\n";
+    cout << "Actual 0 | " << setw(6) << TN << "  | " << setw(6) << FP << "\n";
+    cout << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
 
-    std::cout << "\n📁 Results written to: " << output_file << "\n";
+    cout << "\n📁 Results written to: " << output_file << "\n";
 
     // 📄 保存评估指标到 TXT
-    std::ofstream mfs(metric_file);
-    mfs << std::fixed << std::setprecision(4);
+    ofstream mfs(metric_file);
+    mfs << fixed << setprecision(4);
 
     mfs << "📊 Evaluation Metrics:\n";
     mfs << "✅ Accuracy  : " << accuracy * 100 << "%\n";
@@ -147,23 +136,22 @@ void RfDetector::run_detection(void)
     mfs << "📊 Confusion Matrix:\n";
     mfs << "             Predicted\n";
     mfs << "            0        1\n";
-    mfs << "Actual 0 | " << std::setw(6) << TN << "  | " << std::setw(6) << FP << "\n";
-    mfs << "Actual 1 | " << std::setw(6) << FN << "  | " << std::setw(6) << TP << "\n";
+    mfs << "Actual 0 | " << setw(6) << TN << "  | " << setw(6) << FP << "\n";
+    mfs << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
 
     mfs.close();
 
-    std::cout << "📄 Metrics written to: " << metric_file << "\n";
+    cout << "📄 Metrics written to: " << metric_file << "\n";
 }
 
 
-void RfDetector::run(void) 
+void RFDetector::run(void) 
 {
     const auto train_flows = *loader_->getTrainData();
 
-    // ✅ 训练阶段
     size_t total = train_flows.size();
     size_t count = 0;
-    size_t print_interval = 1000; // 每1000个样本打印一次
+    size_t print_interval = 1000;
 
     for (const auto &[flow, label] : train_flows)
     {
@@ -171,17 +159,14 @@ void RfDetector::run(void)
         arma::vec flowVec = flowExtractor_->extract(flow);
         arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
 
-        if (flowVec.is_empty() || graphVec.is_empty())
-            continue;
-
+        if (flowVec.is_empty() || graphVec.is_empty()) continue;
         addSample(arma::join_vert(flowVec, graphVec), label);
 
-        if (++count % print_interval == 0 || count == total)
-        {
-            std::cout << "\rProcessed " << count << " / " << total << " samples." << std::flush;
+        if (++count % print_interval == 0 || count == total) {
+            cout << "\rProcessed " << count << " / " << total << " samples." << flush;
         }
     }
-    std::cout << std::endl; 
+    cout << endl; 
 
     cout << " 🔄 Start train: " << "\n";
     
