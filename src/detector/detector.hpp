@@ -6,11 +6,13 @@
 #include <mlpack/methods/dbscan/dbscan.hpp>
 #include <mlpack/methods/random_forest/random_forest.hpp>
 
+#include "../algorithm/mini_batch_kmeans.hpp"
 #include "../feature/flow_feature.hpp"
 #include "../feature/graph_features.hpp"
 #include "../dataloader/data_loader.hpp"
 
 using namespace std;
+
 
 class Detector
 {
@@ -94,6 +96,31 @@ public:
 
     void run(void) override;
 };
+
+
+class MiniBatchKMeansDetector : public Detector {
+private:
+    MiniBatchKMeans mbk_;
+    bool trained_ = false;
+    vector<arma::vec> sample_vecs_;
+    size_t outlier_cluster_;
+
+    void addSample(const arma::vec &x);
+    void train(void);
+    size_t predict(const arma::vec &x);
+
+public:
+    explicit MiniBatchKMeansDetector(
+        std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
+        std::shared_ptr<GraphFeatureExtractor> graphExtractor,
+        std::shared_ptr<DataLoader> loader):  
+        Detector(flowExtractor, graphExtractor, loader),
+        mbk_(MiniBatchKMeans(10, 64, 200, 0.8, true)) {};
+
+    void run_detection(void);
+    void run(void) override;
+};
+
 
 shared_ptr<Detector> createDetector(
     const std::string& algorithm, 

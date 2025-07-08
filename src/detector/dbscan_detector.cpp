@@ -4,9 +4,11 @@
 
 namespace fs = filesystem;
 
+
 void DBscanDetector::addSample(const arma::vec &sample) {
     sample_vecs_.push_back(sample);
 }
+
 
 void DBscanDetector::train() {
     if (sample_vecs_.empty()) {
@@ -171,6 +173,7 @@ void DBscanDetector::run_detection(void) {
     mfs.close();
     cout << "📄 Metrics written to: " << metric_file << "\n";
 }
+
 
 void DBscanDetector::printFeatures(void) const noexcept {
     cout << "Number of samples: " << sample_vecs_.size() << endl;

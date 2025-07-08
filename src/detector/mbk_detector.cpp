@@ -1,22 +1,14 @@
-// rfdetecor.cpp
 #include "detector.hpp"
-
-#include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <filesystem>
-#include <chrono>
-#include <ctime>
 
 namespace fs = filesystem;
 
-void RFDetector::addSample(const arma::vec& x, size_t label) {
+
+void MiniBatchKMeansDetector::addSample(const arma::vec& x) {
     sample_vecs_.push_back(x);
-    labels_.push_back(label);
 }
 
 
-void RFDetector::train() {
+void MiniBatchKMeansDetector::train(void) {
     if (trained_ || sample_vecs_.empty()) return;
 
     const size_t dim = sample_vecs_[0].n_elem;
@@ -24,60 +16,42 @@ void RFDetector::train() {
     for (size_t i = 0; i < sample_vecs_.size(); ++i)
         X.col(i) = sample_vecs_[i];
 
-    arma::Row<size_t> Y(labels_);
-    rf_.Train(X, Y, 2);
+    mbk_.Train(X);
+
+    arma::vec global_center = arma::mean(mbk_.Centroids(), 1);
+    arma::vec dists(mbk_.Centroids().n_cols);
+    for (size_t i = 0; i < dists.n_elem; ++i) {
+        dists[i] = arma::norm(mbk_.Centroids().col(i) - global_center, 2);
+    }
+
+    outlier_cluster_ = dists.index_max();  // 离群簇
+    std::cout << "📌 Outlier cluster: " << outlier_cluster_ << std::endl;
+
     trained_ = true;
 }
 
 
-size_t RFDetector::predict(const arma::vec& x) {
-    arma::Row<size_t> pred;
-    rf_.Classify(x, pred);
-    return pred(0);
+size_t MiniBatchKMeansDetector::predict(const arma::vec &X) {
+    size_t cluster = mbk_.Predict(X);
+    return (cluster == outlier_cluster_) ? 1 : 0;  // 1 异常, 0 正常
 }
 
 
-void RFDetector::printFeatures(void) const noexcept
-{
-    if (sample_vecs_.empty()) {
-        cout << "No features to print." << endl;
-        return;
-    }
-
-    cout << "Feature Vectors:" << endl;
-    cout << setw(8) << "Sample";
-
-    for (size_t i = 0; i < sample_vecs_[0].n_elem; ++i) {
-        cout << setw(12) << "Field " << i + 1;
-    }
-    cout << endl;
-
-    for (size_t i = 0; i < sample_vecs_.size(); ++i)
-    {
-        cout << setw(8) << "Sample " << i + 1;
-        for (size_t j = 0; j < sample_vecs_[i].n_elem; ++j) {
-            cout << setw(12) << sample_vecs_[i][j];
-        }
-        cout << endl;
-    }
-}
-
-
-void RFDetector::run_detection(void)
-{
+void MiniBatchKMeansDetector::run_detection(void) {
     const auto data_path = loader_->getDataPath();
     const auto test_flows = *loader_->getTestData();
     size_t TP = 0, TN = 0, FP = 0, FN = 0;
 
     fs::create_directory("result");
     string current_time = get_current_time_str();
-    string base = fs::path(data_path).stem().string(); 
-    string output_file = "result/" + base + "_pred_" + current_time + ".csv";
-    string metric_file = "result/" + base + "_metrics_" + current_time + ".txt";
+    string base = fs::path(data_path).stem().string();
+    string output_file = "result/" + base + "_mini-batch-kmeans_pred_" + current_time + ".csv";
+    string metric_file = "result/" + base + "_mini-batch-kmeans_metrics_" + current_time + ".txt";
+
     ofstream ofs(output_file);
     ofs << "SrcIP,DstIP,Pred,Label\n";
 
-    cout << "\n🔎 Predicting:\n";
+    cout << "\n🔎 Running Mini-Batch-KMeans Detection:\n";
 
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
@@ -118,7 +92,6 @@ void RFDetector::run_detection(void)
     cout << "            0        1\n";
     cout << "Actual 0 | " << setw(6) << TN << "  | " << setw(6) << FP << "\n";
     cout << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
-
     cout << "\n📁 Results written to: " << output_file << "\n";
 
     ofstream mfs(metric_file);
@@ -138,13 +111,11 @@ void RFDetector::run_detection(void)
     mfs << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
 
     mfs.close();
-
     cout << "📄 Metrics written to: " << metric_file << "\n";
 }
 
 
-void RFDetector::run(void) 
-{
+void MiniBatchKMeansDetector::run(void) {
     const auto train_flows = *loader_->getTrainData();
 
     size_t total = train_flows.size();
@@ -158,7 +129,7 @@ void RFDetector::run(void)
         arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
-        addSample(arma::join_vert(flowVec, graphVec), label);
+        addSample(arma::join_vert(flowVec, graphVec));
 
         if (++count % print_interval == 0 || count == total) {
             cout << "\rProcessed " << count << " / " << total << " samples." << flush;

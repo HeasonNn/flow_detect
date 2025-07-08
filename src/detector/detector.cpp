@@ -11,9 +11,8 @@ shared_ptr<Detector> createDetector(const std::string& algorithm,
     else if (algorithm == "DBSCAN") {
         return make_shared<DBscanDetector>(flowExtractor, graphExtractor, loader);
     }
-    else if (algorithm == "GNN") {
-        // TODO:
-        //  GNN 子类的创建
+    else if (algorithm == "Mini_Batch_KMeans") {
+        return make_shared<MiniBatchKMeansDetector>(flowExtractor, graphExtractor, loader);
     }
     else {
         throw std::invalid_argument("Unknown algorithm type: " + algorithm);

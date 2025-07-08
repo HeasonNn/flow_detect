@@ -20,6 +20,8 @@ add_executable(flow_detector
     src/detector/rf_detector.cpp
     src/detector/dbscan_detector.cpp
     src/detector/detector.cpp
+    src/detector/mbk_detector.cpp
+    src/algorithm/mini_batch_kmeans.cpp
 )
 
 target_link_libraries(flow_detector
