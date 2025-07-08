@@ -10,58 +10,93 @@ void DBscanDetector::addSample(const arma::vec &sample) {
 
 void DBscanDetector::train() {
     if (sample_vecs_.empty()) {
-        std::cerr << "No samples to train DBSCAN." << std::endl;
+        cerr << "No samples to train DBSCAN." << endl;
         return;
     }
 
-    arma::mat data(sample_vecs_[0].n_elem, sample_vecs_.size());
-    for (size_t i = 0; i < sample_vecs_.size(); ++i) {
-        data.col(i) = sample_vecs_[i];
+    size_t batch_size = 10000;
+    size_t total_samples = sample_vecs_.size();
+    size_t batch_id = 0;
+
+    for (size_t batch_start = 0; batch_start < total_samples; batch_start += batch_size) {
+        size_t batch_end = min(batch_start + batch_size, total_samples);
+        ++batch_id;
+
+        cout << "📦 [Batch " << batch_id << "] Training on samples [" 
+                  << batch_start << ", " << batch_end << ")..." << endl;
+
+        vector<arma::vec> batch_samples(sample_vecs_.begin() + batch_start, sample_vecs_.begin() + batch_end);
+
+        arma::mat data(batch_samples[0].n_elem, batch_samples.size());
+        for (size_t i = 0; i < batch_samples.size(); ++i)
+            data.col(i) = batch_samples[i];
+
+        scaler_.Fit(data);
+
+        arma::mat norm_data;
+        scaler_.Transform(data, norm_data);
+
+        arma::Row<size_t> labels;
+        mlpack::DBSCAN<> dbscan(epsilon_, minPoints_);
+        dbscan.Cluster(norm_data, labels);
+
+        // 统计聚类簇数与异常点数
+        set<size_t> unique_labels;
+        size_t outliers = 0;
+        for (size_t lbl : labels) {
+            if (lbl == SIZE_MAX)
+                ++outliers;
+            else
+                unique_labels.insert(lbl);
+        }
+
+        cout << "✅ [Batch " << batch_id << "] Clustered into "
+                  << unique_labels.size() << " clusters, "
+                  << outliers << " outliers." << endl;
+
+        models_.push_back(DBSCANModel{
+            .norm_data = move(norm_data),
+            .cluster_labels = move(labels)
+        });
     }
 
-    scaler_.Fit(data);
-    scaler_.Transform(data, norm_train_data_);
-
-    arma::mat centroids;
-    dbscan_.Cluster(norm_train_data_, cluster_labels_, centroids);
-
+    cout << "🎉 Total models trained: " << models_.size() << endl;
     trained_ = true;
 }
 
+
 int DBscanDetector::predict(const arma::vec& sample) {
     if (!trained_) {
-        std::cerr << "Model not trained!" << std::endl;
+        cerr << "Model not trained!" << endl;
         return -1;
     }
 
-    // 将输入样本标准化
     arma::mat sample_mat = sample;
     arma::mat norm_query;
     scaler_.Transform(sample_mat, norm_query);
 
-    // 使用 mlpack 要求的输出格式
-    std::vector<std::vector<size_t>> neighbors;
-    std::vector<std::vector<double>> distances;
+    for (const auto& model : models_) {
+        vector<vector<size_t>> neighbors;
+        vector<vector<double>> distances;
 
-    // 初始化 RangeSearch 并执行搜索
-    mlpack::RangeSearch<> range_search(norm_train_data_);
-    range_search.Search(norm_query, epsilon_, neighbors, distances);  // epsilon_ 是 DBSCAN 的邻域半径
+        mlpack::RangeSearch<> rs(model.norm_data);
+        rs.Search(norm_query, epsilon_, neighbors, distances);
 
-    // 检查是否有邻居
-    if (!neighbors.empty() && !neighbors[0].empty()) {
-        size_t neighbor_index = neighbors[0][0];  // 取第一个邻居
-        return static_cast<int>(cluster_labels_[neighbor_index]);
+        if (!neighbors.empty() && !neighbors[0].empty()) {
+            size_t neighbor_index = neighbors[0][0];
+            return static_cast<int>(model.cluster_labels(neighbor_index));
+        }
     }
 
-    return -1;  // 无邻居或异常情况
+    return -1;
 }
+
 
 void DBscanDetector::run_detection(void) {
     const auto data_path = loader_->getDataPath();
     const auto test_flows = *loader_->getTestData();
     size_t TP = 0, TN = 0, FP = 0, FN = 0;
 
-    // 输出路径准备
     fs::create_directory("result");
     string current_time = get_current_time_str();
     string base = fs::path(data_path).stem().string();
@@ -83,7 +118,7 @@ void DBscanDetector::run_detection(void) {
         arma::vec feat = arma::join_vert(flowVec, graphVec);
 
         size_t pred_raw = predict(feat);
-        size_t pred = (pred_raw == -1) ? 1 : 0;  // -1 表示异常，映射为 1
+        size_t pred = (pred_raw == -1) ? 1 : 0; 
         size_t label = pair.second;
 
         if (pred == 1 && label == 1) TP++;
@@ -115,10 +150,8 @@ void DBscanDetector::run_detection(void) {
     cout << "            0        1\n";
     cout << "Actual 0 | " << setw(6) << TN << "  | " << setw(6) << FP << "\n";
     cout << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
-
     cout << "\n📁 Results written to: " << output_file << "\n";
 
-    // 保存评估指标
     ofstream mfs(metric_file);
     mfs << fixed << setprecision(4);
 
@@ -136,23 +169,21 @@ void DBscanDetector::run_detection(void) {
     mfs << "Actual 1 | " << setw(6) << FN << "  | " << setw(6) << TP << "\n";
 
     mfs.close();
-
     cout << "📄 Metrics written to: " << metric_file << "\n";
 }
 
 void DBscanDetector::printFeatures(void) const noexcept {
-    std::cout << "Number of samples: " << sample_vecs_.size() << std::endl;
+    cout << "Number of samples: " << sample_vecs_.size() << endl;
 }
 
 void DBscanDetector::run(void) {
-        const auto train_flows = *loader_->getTrainData();
+    const auto train_flows = *loader_->getTrainData();
 
     size_t total = train_flows.size();
     size_t count = 0;
     size_t print_interval = 1000;
 
-    for (const auto &[flow, label] : train_flows)
-    {
+    for (const auto &[flow, label] : train_flows) {
         graphExtractor_->updateGraph(flow.src_ip, flow.dst_ip);
         arma::vec flowVec = flowExtractor_->extract(flow);
         arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
@@ -166,7 +197,7 @@ void DBscanDetector::run(void) {
     }
     cout << endl; 
 
-    cout << " 🔄 Start train: " << "\n";
+    cout << "🔄 Start train: " << "\n";
     train();
 
     run_detection();

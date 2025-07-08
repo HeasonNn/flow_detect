@@ -60,16 +60,19 @@ public:
     void run(void) override;
 };
 
+struct DBSCANModel {
+    arma::mat norm_data;
+    arma::Row<size_t> cluster_labels;
+};
+
 class DBscanDetector : public Detector {
 private:
     
     double epsilon_;
     size_t minPoints_;
-    arma::mat norm_train_data_;
-    mlpack::DBSCAN<> dbscan_;
-    arma::Row<size_t> cluster_labels_;
-    mlpack::data::MinMaxScaler scaler_;
 
+    std::vector<DBSCANModel> models_;
+    mlpack::data::MinMaxScaler scaler_;
     vector<arma::vec> sample_vecs_;
 
     bool trained_ = false;
@@ -87,8 +90,7 @@ public:
         std::shared_ptr<GraphFeatureExtractor> graphExtractor,
         std::shared_ptr<DataLoader> loader,
         double epsilon = 1.0, size_t minPoints = 5):  
-        Detector(flowExtractor, graphExtractor, loader), 
-        dbscan_(epsilon, minPoints), epsilon_(epsilon), minPoints_(minPoints) {};
+        Detector(flowExtractor, graphExtractor, loader), epsilon_(epsilon), minPoints_(minPoints) {};
 
     void run(void) override;
 };

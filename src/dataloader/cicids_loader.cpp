@@ -19,7 +19,6 @@ void CICIDSLoader::load() {
 
     __START_FTIMMER__
 
-
     std::ifstream file(data_path_);
     if (!file.is_open()) {
         FATAL_ERROR("Failed to open file: " + data_path_);

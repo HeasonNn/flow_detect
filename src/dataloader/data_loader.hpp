@@ -68,3 +68,10 @@ public:
     void load() override;
     bool import_dataset();
 };
+
+shared_ptr<DataLoader> createDataLoader(
+    const string& data_type, 
+    const string& data_path, 
+    const string& label_path = "", 
+    const double train_ratio = 0.8
+);

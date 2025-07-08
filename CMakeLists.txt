@@ -15,6 +15,7 @@ add_executable(flow_detector
     src/feature/graph_features.cpp
     src/dataloader/cicids_loader.cpp
     src/dataloader/hypervison_loader.cpp
+    src/dataloader/data_loader.cpp
     src/flow_construct/explicit_constructor.cpp
     src/detector/rf_detector.cpp
     src/detector/dbscan_detector.cpp
@@ -23,6 +24,7 @@ add_executable(flow_detector
 
 target_link_libraries(flow_detector
     ${MLPACK_LIBRARIES}
+    gflags
     pcap
     gomp
     pthread
