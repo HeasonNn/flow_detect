@@ -5,6 +5,8 @@
 #include <mlpack/core.hpp>
 #include <mlpack/methods/dbscan/dbscan.hpp>
 #include <mlpack/methods/random_forest/random_forest.hpp>
+#include <mlpack/core/data/save.hpp>
+#include <mlpack/methods/pca/pca.hpp>
 
 #include "../algorithm/mini_batch_kmeans.hpp"
 #include "../feature/flow_feature.hpp"
@@ -23,14 +25,15 @@ protected:
 
 public:
 
-    explicit Detector(
-        shared_ptr<FlowFeatureExtractor> flowExtractor, 
-        shared_ptr<GraphFeatureExtractor> graphExtractor,
-        shared_ptr<DataLoader> loader
-    ):  flowExtractor_(flowExtractor), graphExtractor_(graphExtractor), loader_(loader) 
-    { 
-        loader_->load(); 
-    };
+    explicit Detector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                      std::shared_ptr<GraphFeatureExtractor> graphExtractor,
+                      std::shared_ptr<DataLoader> loader)
+        : flowExtractor_(std::move(flowExtractor)), 
+          graphExtractor_(std::move(graphExtractor)), 
+          loader_(std::move(loader))
+    {
+        if (loader_) loader_->load();
+    }
 
     virtual void run() = 0;
     virtual ~Detector() = default;
@@ -53,11 +56,10 @@ private:
     void printFeatures(void) const noexcept;
 
 public:
-    explicit RFDetector(
-        shared_ptr<FlowFeatureExtractor> flowExtractor, 
-        shared_ptr<GraphFeatureExtractor> graphExtractor,
-        shared_ptr<DataLoader> loader
-    ):  Detector(flowExtractor, graphExtractor, loader) {};
+    explicit RFDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                        shared_ptr<GraphFeatureExtractor> graphExtractor,
+                        shared_ptr<DataLoader> loader)
+        : Detector(flowExtractor, graphExtractor, loader) {};
 
     void run(void) override;
 };
@@ -79,20 +81,15 @@ private:
 
     bool trained_ = false;
 
-    void addSample(const arma::vec &x);
-    void train(void);
-    int predict(const arma::vec &x);
-
-    void run_detection(void);
-    void printFeatures(void) const noexcept;
+    void AddSample(const arma::vec &x);
+    void Detect(const vector<pair<FlowRecord, size_t>>& flows);
 
 public:
-    explicit DBscanDetector(
-        std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
-        std::shared_ptr<GraphFeatureExtractor> graphExtractor,
-        std::shared_ptr<DataLoader> loader,
-        double epsilon = 1.0, size_t minPoints = 5):  
-        Detector(flowExtractor, graphExtractor, loader), epsilon_(epsilon), minPoints_(minPoints) {};
+    explicit DBscanDetector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                            std::shared_ptr<GraphFeatureExtractor> graphExtractor,
+                            std::shared_ptr<DataLoader> loader,
+                            double epsilon, size_t minPoints)
+        : Detector(flowExtractor, graphExtractor, loader), epsilon_(epsilon), minPoints_(minPoints) {};
 
     void run(void) override;
 };
@@ -100,33 +97,46 @@ public:
 
 class MiniBatchKMeansDetector : public Detector {
 private:
+    MiniBatchKMeansConfig model_config_;
     MiniBatchKMeans mbk_;
-    bool trained_ = false;
     vector<arma::vec> sample_vecs_;
-    size_t outlier_cluster_;
+    
+    size_t global_threshold_ = 3;
+    bool trained_ = false;
 
-    void addSample(const arma::vec &x);
-    void train(void);
-    size_t predict(const arma::vec &x);
+    std::vector<size_t> cluster_counts_;
+    std::unordered_map<size_t, std::vector<double>> cluster_dists_;
+    std::unordered_map<size_t, double> cluster_mean_;
+    std::unordered_map<size_t, double> cluster_stddev_;
+    std::unordered_map<size_t, double> cluster_thresholds_;
+
+    std::vector<arma::vec> normalized_sample_vecs_;
+
+    void AddSample(const arma::vec &x);
+    void Train(void);
+    size_t Predict(const arma::vec &x);
+
+    void PerformPCAVisualization();
+
+    void PrintClusteDetail();
+
+    void SaveTrainClusterResult(const std::string& filename);
+    void SaveTestAbnormalClusterResult(const std::string& filename);
 
 public:
-    explicit MiniBatchKMeansDetector(
-        std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
-        std::shared_ptr<GraphFeatureExtractor> graphExtractor,
-        std::shared_ptr<DataLoader> loader):  
-        Detector(flowExtractor, graphExtractor, loader),
-        mbk_(MiniBatchKMeans(10, 64, 200, 0.8, true)) {};
+    explicit MiniBatchKMeansDetector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                                     std::shared_ptr<GraphFeatureExtractor> graphExtractor,
+                                     std::shared_ptr<DataLoader> loader)
+        : Detector(flowExtractor, graphExtractor, loader), model_config_(), mbk_(model_config_){};
 
     void run_detection(void);
     void run(void) override;
 };
 
 
-shared_ptr<Detector> createDetector(
-    const std::string& algorithm, 
-    shared_ptr<FlowFeatureExtractor> flowExtractor, 
-    shared_ptr<GraphFeatureExtractor> graphExtractor,
-    shared_ptr<DataLoader> loader
-);
+shared_ptr<Detector> createDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                                    shared_ptr<GraphFeatureExtractor> graphExtractor,
+                                    shared_ptr<DataLoader> loader,
+                                    const json& config_j);
 
 string get_current_time_str(void);

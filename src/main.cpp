@@ -16,25 +16,27 @@ int main(int argc, char *argv[])
 
     json config_j;
     try {
-        std::ifstream fin(FLAGS_config);
+        ifstream fin(FLAGS_config);
         if (!fin.is_open()) {
             FATAL_ERROR("Cannot open config file: " + FLAGS_config);
         }
         fin >> config_j;
-    } catch (const std::exception& e) {
-        FATAL_ERROR(std::string("Failed to load or parse config: ") + e.what());
+    } catch (const exception& e) {
+        FATAL_ERROR(string("Failed to load or parse config: ") + e.what());
     }
     
-    const std::string algorithm  = config_j.value("algorithm",  "");
-    const std::string data_type  = config_j.value("data_type",  "");
-    const std::string data_path  = config_j.value("data_path",  "");
-    const std::string label_path = config_j.value("label_path", "");
+    const string algorithm = config_j.value("algorithm",  "");
+    const string data_type = config_j.value("data_type",  "");
+    const string data_path = config_j.value("data_path",  "");
+    const string label_path = config_j.value("label_path", "");
+    const double train_ratio = config_j.value("train_ratio", 0.8);
+    const int data_size = config_j.value("data_size", -1);
 
     auto flowExtractor = make_shared<FlowFeatureExtractor>();
     auto graphExtractor = make_shared<GraphFeatureExtractor>();
     
-    auto loader = createDataLoader(data_type, data_path, label_path);
-    auto detector = createDetector(algorithm, flowExtractor, graphExtractor, loader);
+    auto loader = createDataLoader(config_j);
+    auto detector = createDetector(flowExtractor, graphExtractor, loader, config_j);
 
     detector->run();
 

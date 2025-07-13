@@ -11,11 +11,19 @@ bool HyperVisonLoader::import_dataset()
 
     __START_FTIMMER__
 
+    
     vector<string> packet_lines;
     string line;
-    while (getline(data_file, line)) {
+
+    if (data_size_ == -1) {
+        data_size_ = std::numeric_limits<int>::max();
+    }
+    
+    size_t cnt = 0;
+    while (std::getline(data_file, line) && cnt < data_size_) {
         if (!line.empty()) {
             packet_lines.emplace_back(std::move(line));
+            ++cnt;
         }
     }
 
@@ -24,19 +32,16 @@ bool HyperVisonLoader::import_dataset()
         return false;
     }
 
+    constexpr size_t kThreadCount = 24;
     const size_t total_packets = packet_lines.size();
     parse_result_ = make_shared<decltype(parse_result_)::element_type>(total_packets);
-
-
-    constexpr size_t kThreadCount = 24;
     const size_t chunk_size = (total_packets + kThreadCount - 1) / kThreadCount;
 
     auto parse_range = [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) {
             const auto& packet = packet_lines[i];
-            if (packet.empty()) {
-                parse_result_->at(i) = make_shared<basic_packet_bad>();
-            } else {
+            if (packet.empty()) parse_result_->at(i) = make_shared<basic_packet_bad>();
+            else {
                 switch (packet[0]) {
                     case '4': parse_result_->at(i) = make_shared<basic_packet4>(packet); break;
                     case '6': parse_result_->at(i) = make_shared<basic_packet6>(packet); break;
@@ -50,8 +55,7 @@ bool HyperVisonLoader::import_dataset()
     for (size_t i = 0; i < kThreadCount; ++i) {
         size_t begin = i * chunk_size;
         size_t end = min(begin + chunk_size, total_packets);
-        if (begin < end)
-            threads.emplace_back(parse_range, begin, end);
+        if (begin < end) threads.emplace_back(parse_range, begin, end);
     }
 
     for (auto& t : threads)
@@ -64,17 +68,18 @@ bool HyperVisonLoader::import_dataset()
     }
 
     label_ = make_shared<vector<bool>>();
-    if (getline(label_file, line)) {
-        label_->reserve(line.size());
+    cnt = 0;
+    while (std::getline(label_file, line) && cnt < data_size_) {
         for (char c : line) {
-            if (c == '0' || c == '1')
+            if (c == '0' || c == '1') {
                 label_->emplace_back(c == '1');
+                if (++cnt >= data_size_) break;
+            }
         }
     }
 
     if (label_->size() != parse_result_->size()) {
-        cerr << "❌ Label count (" << label_->size()
-             << ") does not match packet count (" << parse_result_->size() << ")\n";
+        cerr << "❌ Label count (" << label_->size() << ") does not match packet count (" << parse_result_->size() << ")\n";
         return false;
     }
 
@@ -119,6 +124,7 @@ void HyperVisonLoader::load()
     }
 
     size_t train_size = static_cast<size_t>(train_ratio_ * all.size());
+    all_data_ptr_->assign(all.begin(), all.end());
     train_data_ptr_->assign(all.begin(), all.begin() + train_size);
     test_data_ptr_->assign(all.begin() + train_size, all.end());
 
@@ -128,10 +134,6 @@ void HyperVisonLoader::load()
     }
 
     LOGF("📦 Loaded total: %zu | Train: %zu | Test: %zu | BENIGN: %zu | ATTACK: %zu", 
-        all.size(), 
-        train_data_ptr_->size(), 
-        test_data_ptr_->size(), 
-        benign_count, 
-        attack_count
+        all.size(), train_data_ptr_->size(), test_data_ptr_->size(), benign_count, attack_count
     );
 }

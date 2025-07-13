@@ -1,15 +1,21 @@
 #include "detector.hpp"
 
-shared_ptr<Detector> createDetector(const std::string& algorithm, 
-                                    shared_ptr<FlowFeatureExtractor> flowExtractor, 
+shared_ptr<Detector> createDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
                                     shared_ptr<GraphFeatureExtractor> graphExtractor,
-                                    shared_ptr<DataLoader> loader) 
+                                    shared_ptr<DataLoader> loader,
+                                    const json& config_j)
 {
+    const string& algorithm = config_j["algorithm"];
+    const json& detector = config_j["detector"];
+
+    const double epsilon = detector.value("epsilon", 0.1);
+    const size_t min_points = detector.value("min_points", 10);
+    
     if (algorithm == "RF") {
         return make_shared<RFDetector>(flowExtractor, graphExtractor, loader);
     }
     else if (algorithm == "DBSCAN") {
-        return make_shared<DBscanDetector>(flowExtractor, graphExtractor, loader);
+        return make_shared<DBscanDetector>(flowExtractor, graphExtractor, loader, epsilon, min_points);
     }
     else if (algorithm == "Mini_Batch_KMeans") {
         return make_shared<MiniBatchKMeansDetector>(flowExtractor, graphExtractor, loader);

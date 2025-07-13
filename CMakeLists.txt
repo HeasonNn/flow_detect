@@ -3,6 +3,14 @@ project(FlowAnomalyDetector)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# 设置 Debug 构建类型为默认（可选）
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+# 设置编译器选项
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MLPACK REQUIRED mlpack)
 

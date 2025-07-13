@@ -30,7 +30,12 @@ void CICIDSLoader::load() {
 
     std::vector<std::pair<FlowRecord, size_t>> all;
 
-    while (std::getline(file, line)) {
+    if (data_size_ == -1) {
+        data_size_ = std::numeric_limits<int>::max();
+    }
+    
+    size_t cnt = 0;
+    while (std::getline(file, line) && cnt < data_size_) {
         std::vector<std::string> fields;
         std::string_view line_view(line);
 
@@ -79,9 +84,11 @@ void CICIDSLoader::load() {
         size_t y = (label == "BENIGN" ? 0 : 1);
 
         all.emplace_back(std::move(fr), y);
+        ++cnt;
     }
 
     size_t train_size = static_cast<size_t>(train_ratio_ * all.size());
+    all_data_ptr_->assign(all.begin(), all.end());
     train_data_ptr_->assign(all.begin(), all.begin() + train_size);
     test_data_ptr_->assign(all.begin() + train_size, all.end());
 

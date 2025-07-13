@@ -9,33 +9,42 @@ using namespace std;
 class DataLoader
 {
 protected:
+    shared_ptr<vector<pair<FlowRecord, size_t>>> all_data_ptr_;
     shared_ptr<vector<pair<FlowRecord, size_t>>> train_data_ptr_;
     shared_ptr<vector<pair<FlowRecord, size_t>>> test_data_ptr_;
     string data_path_, label_path_;
     double train_ratio_;
+    int data_size_;
 
 public:
-    explicit DataLoader(): 
-        train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        train_ratio_(0.8) {}
+    explicit DataLoader()
+        : all_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          data_size_(-1), train_ratio_(0.8) {}
 
-    explicit DataLoader(const string &data_path):  
-        train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        data_path_(data_path), train_ratio_(0.8) {}
+    explicit DataLoader(const string &data_path)
+        : all_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          data_size_(-1), data_path_(data_path), train_ratio_(0.8) {}
 
-    explicit DataLoader(
-        const string &data_path, 
-        const string &label_path, 
-        double train_ratio = 0.8
-    ):  train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
-        data_path_(data_path), label_path_(label_path), train_ratio_(train_ratio) {}
+    explicit DataLoader(const string &data_path, int data_size = -1)
+        : all_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          data_size_(data_size), data_path_(data_path), train_ratio_(0.8) {}
+
+    explicit DataLoader(const string &data_path, const string &label_path, double train_ratio = 0.8, int data_size = -1)
+        : all_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          train_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          test_data_ptr_(make_shared<vector<pair<FlowRecord, size_t>>>()),
+          data_size_(data_size), data_path_(data_path), label_path_(label_path), train_ratio_(train_ratio) {}
 
     virtual ~DataLoader() = default;
     virtual void load() = 0;
     
+    shared_ptr<const vector<pair<FlowRecord, size_t>>> getAllData() const { return all_data_ptr_; }
     shared_ptr<const vector<pair<FlowRecord, size_t>>> getTrainData() const { return train_data_ptr_; }
     shared_ptr<const vector<pair<FlowRecord, size_t>>> getTestData() const { return test_data_ptr_; }
 
@@ -69,9 +78,4 @@ public:
     bool import_dataset();
 };
 
-shared_ptr<DataLoader> createDataLoader(
-    const string& data_type, 
-    const string& data_path, 
-    const string& label_path = "", 
-    const double train_ratio = 0.8
-);
+shared_ptr<DataLoader> createDataLoader(const json& config_j);

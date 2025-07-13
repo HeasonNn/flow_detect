@@ -3,39 +3,70 @@
 namespace fs = filesystem;
 
 
-void MiniBatchKMeansDetector::addSample(const arma::vec& x) {
+void MiniBatchKMeansDetector::AddSample(const arma::vec& x) {
     sample_vecs_.push_back(x);
 }
 
 
-void MiniBatchKMeansDetector::train(void) {
+void MiniBatchKMeansDetector::Train() {
     if (trained_ || sample_vecs_.empty()) return;
 
-    const size_t dim = sample_vecs_[0].n_elem;
-    arma::mat X(dim, sample_vecs_.size());
+    arma::mat data(sample_vecs_[0].n_rows, sample_vecs_.size());
     for (size_t i = 0; i < sample_vecs_.size(); ++i)
-        X.col(i) = sample_vecs_[i];
+        data.col(i) = sample_vecs_[i];
 
-    mbk_.Train(X);
-
-    arma::vec global_center = arma::mean(mbk_.Centroids(), 1);
-    arma::vec dists(mbk_.Centroids().n_cols);
-    for (size_t i = 0; i < dists.n_elem; ++i) {
-        dists[i] = arma::norm(mbk_.Centroids().col(i) - global_center, 2);
-    }
-
-    outlier_cluster_ = dists.index_max();  // 离群簇
-    std::cout << "📌 Outlier cluster: " << outlier_cluster_ << std::endl;
+    // 训练 MiniBatchKMeans
+    mbk_.Train(data);
 
     trained_ = true;
+
+    for (size_t i = 0; i < data.n_cols; ++i) {
+        arma::vec x = data.col(i);
+        auto [cluster, dist] = mbk_.Predict(x);
+        cluster_dists_[cluster].push_back(dist);
+    }
+
+    // ==== 计算每簇的距离统计（均值 + 标准差） ====
+    cluster_mean_.clear();
+    cluster_stddev_.clear();
+    for (const auto& [cluster, dists] : cluster_dists_) {
+        double mean = arma::mean(arma::vec(dists));
+        double stddev = arma::stddev(arma::vec(dists));
+        cluster_mean_[cluster] = mean;
+        cluster_stddev_[cluster] = stddev;
+    }
+
+    cluster_thresholds_.clear();
+    for (const auto& [cluster, dists] : cluster_dists_) {
+        if (dists.size() < 5) {  // 小样本簇使用全局阈值
+            cluster_thresholds_[cluster] = global_threshold_;
+            continue;
+        }
+        
+        // 计算95%分位数
+        std::vector<double> sorted_dists = dists;
+        std::sort(sorted_dists.begin(), sorted_dists.end());
+        size_t idx = std::min(static_cast<size_t>(sorted_dists.size() * 0.995), sorted_dists.size()-1);
+        cluster_thresholds_[cluster] = sorted_dists[idx];
+    }
+
+    std::cout << "📊 Cluster Thresholds:\n";
+    for (size_t i = 0; i < cluster_thresholds_.size(); ++i) {
+        std::cout << "  - Cluster " << i << ": Threshold = " << cluster_thresholds_[i] << "\n";
+    }
 }
 
 
-size_t MiniBatchKMeansDetector::predict(const arma::vec &X) {
-    size_t cluster = mbk_.Predict(X);
-    return (cluster == outlier_cluster_) ? 1 : 0;  // 1 异常, 0 正常
-}
+size_t MiniBatchKMeansDetector::Predict(const arma::vec& X) {
+    const auto [cluster, dist] = mbk_.Predict(X);
 
+    auto it = cluster_thresholds_.find(cluster);
+    if (it != cluster_thresholds_.end() && dist > it->second) {
+        return 1;
+    }
+
+    return 0;
+}
 
 void MiniBatchKMeansDetector::run_detection(void) {
     const auto data_path = loader_->getDataPath();
@@ -58,9 +89,8 @@ void MiniBatchKMeansDetector::run_detection(void) {
         arma::vec flowVec = flowExtractor_->extract(flow);
         arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
 
-        if (flowVec.n_elem == 0 || graphVec.n_elem == 0) continue;
         arma::vec feat = arma::join_vert(flowVec, graphVec);
-        size_t pred = predict(feat);
+        size_t pred = Predict(feat);
         size_t label = pair.second;
 
         if (pred == 1 && label == 1) TP++;
@@ -124,12 +154,13 @@ void MiniBatchKMeansDetector::run(void) {
 
     for (const auto &[flow, label] : train_flows)
     {
+        if(label) continue;
         graphExtractor_->updateGraph(flow.src_ip, flow.dst_ip);
         arma::vec flowVec = flowExtractor_->extract(flow);
         arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
-        addSample(arma::join_vert(flowVec, graphVec));
+        AddSample(arma::join_vert(flowVec, graphVec));
 
         if (++count % print_interval == 0 || count == total) {
             cout << "\rProcessed " << count << " / " << total << " samples." << flush;
@@ -139,7 +170,140 @@ void MiniBatchKMeansDetector::run(void) {
 
     cout << " 🔄 Start train: " << "\n";
     
-    train();
+    Train();
+
+    PrintClusteDetail();
 
     run_detection();
+
+    SaveTrainClusterResult("train_clusters.csv");
+    SaveTestAbnormalClusterResult("test_clusters.csv");
+
+    // PerformPCAVisualization();
+}
+
+
+void MiniBatchKMeansDetector::PerformPCAVisualization() {
+    if (sample_vecs_.empty()) {
+        std::cerr << "No samples available for PCA." << std::endl;
+        return;
+    }
+
+    const auto& train_flows = *loader_->getTrainData();
+    
+    // 验证样本一致性
+    if (sample_vecs_.size() != train_flows.size()) {
+        std::cerr << "Sample count mismatch: vectors=" << sample_vecs_.size()
+                  << " labels=" << train_flows.size() << std::endl;
+        return;
+    }
+
+    // 构建数据矩阵：每列一个样本
+    arma::mat data(sample_vecs_[0].n_elem, sample_vecs_.size());
+    for (size_t i = 0; i < sample_vecs_.size(); ++i) {
+        data.col(i) = sample_vecs_[i];  // 列存储样本
+    }
+
+    // 特征缩放
+    mlpack::data::MinMaxScaler scaler;
+    arma::mat norm_data;
+    scaler.Fit(data);
+    scaler.Transform(data, norm_data);
+
+    // 执行PCA：输入[特征数×样本数]，输出[2×样本数]
+    arma::mat transformedData;
+    mlpack::PCA pca;
+    pca.Apply(norm_data, transformedData, 2);
+
+    // 准备输出矩阵：每行一个样本，列分别为PCA1, PCA2, Cluster
+    arma::mat final_output(transformedData.n_cols, 3);  // [N, 3]
+    
+    // 填充PCA结果（转置后每行对应一个样本）
+    final_output.col(0) = transformedData.row(0).t();
+    final_output.col(1) = transformedData.row(1).t();
+    
+    // 填充聚类标签
+    for (size_t i = 0; i < transformedData.n_cols; ++i) {
+        final_output(i, 2) = train_flows[i].second;
+    }
+
+    final_output = final_output.t();
+
+    // 保存结果
+    std::string filename = "pca_result.csv";
+    if (!mlpack::data::Save(filename, final_output)) {
+        std::cerr << "❌ Failed to save PCA output to " << filename << std::endl;
+    } else {
+        std::cout << "✅ PCA result saved to " << filename << std::endl;
+        std::cout << "Saving matrix shape: " << final_output.n_rows 
+                  << " x " << final_output.n_cols << std::endl;
+        std::cout << "👉 CSV format: [PCA1, PCA2, Cluster] per row." << std::endl;
+    }
+}
+
+void MiniBatchKMeansDetector::PrintClusteDetail() {    
+    cluster_counts_.clear();
+
+    std::cout << "📊 Cluster Statistics:\n";
+    for (size_t i = 0; i < mbk_.K(); ++i) {
+        auto it = cluster_dists_.find(i);
+        if (it == cluster_dists_.end()) {
+            std::cout << "Cluster " << i << ": (empty)\n";
+            continue;
+        }
+
+        const std::vector<double>& dists = it->second;
+        arma::vec arma_dists(dists);
+
+        double mean = arma::mean(arma_dists);
+        double stddev = arma::stddev(arma_dists);
+        double min_dist = arma::min(arma_dists);
+        double max_dist = arma::max(arma_dists);
+        size_t count = it->second.size();
+
+        std::cout << "🔹 Cluster " << i
+                  << " | Size: " << count
+                  << " | Mean: " << mean
+                  << " | StdDev: " << stddev
+                  << " | Min: " << min_dist
+                  << " | Max: " << max_dist
+                  << '\n';
+    }
+}
+
+void MiniBatchKMeansDetector::SaveTrainClusterResult(const std::string& filename) {
+    std::ofstream ofs(filename);
+    ofs << "Index,Cluster,Distance\n";
+
+    size_t idx = 0;
+    for (const auto& [cluster, dists] : cluster_dists_) {
+        for (double dist : dists) {
+            ofs << idx++ << "," << cluster << "," << dist << "\n";
+        }
+    }
+
+    std::cout << "✅ Saved training cluster results to: " << filename << "\n";
+}
+
+void MiniBatchKMeansDetector::SaveTestAbnormalClusterResult(const std::string& filename) {
+    const auto& test_flows = *loader_->getTestData();
+    std::ofstream ofs(filename);
+    ofs << "Index,SrcIP,DstIP,Cluster,Distance,Label\n";
+
+    size_t index = 0;
+    for (const auto& pair : test_flows) {
+        const FlowRecord& flow = pair.first;
+        size_t label = pair.second;
+
+        arma::vec flowVec = flowExtractor_->extract(flow);
+        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec feat = arma::join_vert(flowVec, graphVec);
+        auto [cluster, dist] = mbk_.Predict(feat);
+
+        ofs << index++ << ","
+            << flow.src_ip << "," << flow.dst_ip << ","
+            << cluster << "," << dist << "," << label << "\n";
+    }
+
+    std::cout << "✅ Saved test cluster results to: " << filename << "\n";
 }
