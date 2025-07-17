@@ -90,7 +90,7 @@ bool HyperVisonLoader::import_dataset()
 }
 
 
-void HyperVisonLoader::load() 
+void HyperVisonLoader::Load() 
 {
     if (!import_dataset()) {
         cerr << "❌ Failed to load dataset: " << data_path_ << "\n";
@@ -108,8 +108,8 @@ void HyperVisonLoader::load()
         const auto& [src_ip, dst_ip, src_port, dst_port, stack_code] = flow->flow_id;
 
         FlowRecord fr;
-        fr.src_ip   = get_str_addr(src_ip);
-        fr.dst_ip   = get_str_addr(dst_ip);
+        fr.src_ip   = src_ip;
+        fr.dst_ip   = dst_ip;
         fr.src_port = src_port;
         fr.dst_port = dst_port;
         fr.proto = stack_code_to_type(stack_code);

@@ -66,7 +66,7 @@ void RFDetector::printFeatures(void) const noexcept
 void RFDetector::run_detection(void)
 {
     const auto data_path = loader_->getDataPath();
-    const auto test_flows = *loader_->getTestData();
+    const auto& test_flows = *loader_->getTestData();
     size_t TP = 0, TN = 0, FP = 0, FN = 0;
 
     fs::create_directory("result");
@@ -145,7 +145,7 @@ void RFDetector::run_detection(void)
 
 void RFDetector::run(void) 
 {
-    const auto train_flows = *loader_->getTrainData();
+    const auto& train_flows = *loader_->getTrainData();
 
     size_t total = train_flows.size();
     size_t count = 0;

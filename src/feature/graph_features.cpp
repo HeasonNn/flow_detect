@@ -1,6 +1,6 @@
 #include "graph_features.hpp"
 
-void GraphFeatureExtractor::updateGraph(const std::string& src, const std::string& dst) {
+void GraphFeatureExtractor::updateGraph(const uint32_t src, const uint32_t dst) {
     node_activity[src]++;
     node_activity[dst]++;
 
@@ -11,35 +11,9 @@ void GraphFeatureExtractor::updateGraph(const std::string& src, const std::strin
         edge_activity[{src, dst}] = 1;
     }
 
-    update_count++;
-
-    if (update_count >= 100) {
-        pruneInactiveElements();
-        update_count = 0;
-    }
 }
 
-void GraphFeatureExtractor::pruneInactiveElements() {
-    for (auto it = node_activity.begin(); it != node_activity.end();) {
-        if (it->second < ACTIVITY_THRESHOLD) {
-            adj.erase(it->first);
-            it = node_activity.erase(it); 
-        } else {
-            ++it;
-        }
-    }
-
-    for (auto it = edge_activity.begin(); it != edge_activity.end();) {
-        if (it->second < ACTIVITY_THRESHOLD) {
-            adj[std::get<0>(it->first)].erase(std::get<1>(it->first)); 
-            it = edge_activity.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-arma::vec GraphFeatureExtractor::extract(const std::string& src, const std::string& dst) {
+arma::vec GraphFeatureExtractor::extract(const std::uint32_t src, std::uint32_t dst) {
     int src_deg = adj[src].size();
     int dst_deg = adj[dst].size();
     int mutual = 0;

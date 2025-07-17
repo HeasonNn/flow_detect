@@ -20,6 +20,7 @@
 #include <locale>
 #include <unordered_map>
 #include <unordered_set>
+#include <optional>
 
 // #define NDEBUG
 #include <assert.h>
@@ -50,6 +51,17 @@ static inline auto get_time_spec(double dtime) -> timespec {
     ret_time_spec.tv_sec = ceil(dtime);
     ret_time_spec.tv_nsec = (u_int64_t) ((dtime - ceil(dtime)) * 1e9);
     return ret_time_spec;
+}
+
+namespace std {
+    template <>
+    struct hash<std::pair<std::uint32_t, std::uint32_t>> {
+        size_t operator()(const std::pair<std::uint32_t, std::uint32_t>& p) const noexcept {
+            size_t h1 = std::hash<std::uint32_t>{}(p.first);
+            size_t h2 = std::hash<std::uint32_t>{}(p.second);
+            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        }
+    };
 }
 
 #define ENHANCED_OUTPUT

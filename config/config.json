@@ -1,16 +1,18 @@
 {
     "data_loader": {
         "data_type": "CICIDS",
-        "data_path": "/home/a/data/TrafficLabelling/Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+        "data_path": "/home/a/data/TrafficLabelling/CICIDS2017.csv",
         "label_path": "",
         "train_ratio": 0.8,
-        "data_size": 20000
+        "data_size": 1000
     },
     "algorithm": "DBSCAN",
     "detector": {
         "dbscan_config": {
-            "epsilon": 0.01,
-            "min_points": 10
-        }
+            "epsilon": 0.1,
+            "min_points": 10,
+            "outline_threshold": 0.01
+        },
+        "window_size": 10000
     }
 }

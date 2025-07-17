@@ -15,16 +15,14 @@ shared_ptr<DataLoader> createDataLoader(const json& config_j)
     const double min_points = detector.value("min_points", 0.1);
     
     if (data_type == "CICIDS") {
-        return make_shared<CICIDSLoader>(data_path, data_size);
+        return make_shared<CICIDSLoader>(data_path, label_path, train_ratio, data_size);
     }
     else if (data_type == "HyperVision") {
-        if (label_path.empty()) {
-            std::cerr << "[DataLoader] Error: label_path is required for HyperVison dataset.\n";
-            return nullptr;
-        }
         return std::make_shared<HyperVisonLoader>(data_path, label_path, train_ratio, data_size);
     }
-    
+    else if (data_type == "Pcap") {
+        return std::make_shared<PcapLoader>(data_path, label_path, train_ratio, data_size);
+    }
     else {
         throw std::invalid_argument("Unknown data type: " + data_type);
     }

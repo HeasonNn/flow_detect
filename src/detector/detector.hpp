@@ -12,6 +12,7 @@
 #include "../feature/flow_feature.hpp"
 #include "../feature/graph_features.hpp"
 #include "../dataloader/data_loader.hpp"
+#include "../graph_construct/edge_constructor.hpp"
 
 using namespace std;
 
@@ -21,22 +22,23 @@ class Detector
 protected:
     shared_ptr<FlowFeatureExtractor> flowExtractor_;
     shared_ptr<GraphFeatureExtractor> graphExtractor_;
-    shared_ptr<DataLoader> loader_; 
-
+    shared_ptr<DataLoader> loader_;
 public:
 
-    explicit Detector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                      std::shared_ptr<GraphFeatureExtractor> graphExtractor,
-                      std::shared_ptr<DataLoader> loader)
-        : flowExtractor_(std::move(flowExtractor)), 
-          graphExtractor_(std::move(graphExtractor)), 
-          loader_(std::move(loader))
-    {
-        if (loader_) loader_->load();
-    }
+    explicit Detector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                      shared_ptr<GraphFeatureExtractor> graphExtractor,
+                      shared_ptr<DataLoader> loader)
+        : flowExtractor_(move(flowExtractor)), 
+          graphExtractor_(move(graphExtractor)), 
+          loader_(move(loader)) 
+        {
+            loader_->Load();
+        }
+
+    virtual ~Detector() = default;
 
     virtual void run() = 0;
-    virtual ~Detector() = default;
+    void Start();
 };
 
 
@@ -71,25 +73,42 @@ struct DBSCANModel {
 
 class DBscanDetector : public Detector {
 private:
-    
-    double epsilon_;
-    size_t minPoints_;
+    const json& config_;    
 
-    std::vector<DBSCANModel> models_;
+    double epsilon_;
+    size_t min_points_;
+    double outline_threshold_;
+
+    vector<DBSCANModel> models_;
     mlpack::data::MinMaxScaler scaler_;
     vector<arma::vec> sample_vecs_;
 
     bool trained_ = false;
 
-    void AddSample(const arma::vec &x);
-    void Detect(const vector<pair<FlowRecord, size_t>>& flows);
 
+    void aggreagte(void);
+    void addSample(const arma::vec &x);
+    void detect(const vector<pair<FlowRecord, size_t>>& flows);
+
+    void printSamples() const;
+    
 public:
-    explicit DBscanDetector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                            std::shared_ptr<GraphFeatureExtractor> graphExtractor,
-                            std::shared_ptr<DataLoader> loader,
-                            double epsilon, size_t minPoints)
-        : Detector(flowExtractor, graphExtractor, loader), epsilon_(epsilon), minPoints_(minPoints) {};
+    explicit DBscanDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                            shared_ptr<GraphFeatureExtractor> graphExtractor,
+                            shared_ptr<DataLoader> loader,
+                            const json& config)
+        : Detector(flowExtractor, graphExtractor, loader), 
+          config_(config)
+    {
+        const json& dbscan_config_ = config_["dbscan_config"];
+        epsilon_ = dbscan_config_.value("epsilon", 0.1);
+        min_points_ = dbscan_config_.value("min_points", 10);
+        outline_threshold_ = dbscan_config_.value("outline_threshold", 0.1);
+
+        cout << "epsilon_: "          << epsilon_ << " "
+             << "minPoints_: "        << min_points_ << " "
+             << "outline_threshold_: "<< outline_threshold_ << "\n";
+    };
 
     void run(void) override;
 };
@@ -104,13 +123,13 @@ private:
     size_t global_threshold_ = 3;
     bool trained_ = false;
 
-    std::vector<size_t> cluster_counts_;
-    std::unordered_map<size_t, std::vector<double>> cluster_dists_;
-    std::unordered_map<size_t, double> cluster_mean_;
-    std::unordered_map<size_t, double> cluster_stddev_;
-    std::unordered_map<size_t, double> cluster_thresholds_;
+    vector<size_t> cluster_counts_;
+    unordered_map<size_t, vector<double>> cluster_dists_;
+    unordered_map<size_t, double> cluster_mean_;
+    unordered_map<size_t, double> cluster_stddev_;
+    unordered_map<size_t, double> cluster_thresholds_;
 
-    std::vector<arma::vec> normalized_sample_vecs_;
+    vector<arma::vec> normalized_sample_vecs_;
 
     void AddSample(const arma::vec &x);
     void Train(void);
@@ -120,14 +139,16 @@ private:
 
     void PrintClusteDetail();
 
-    void SaveTrainClusterResult(const std::string& filename);
-    void SaveTestAbnormalClusterResult(const std::string& filename);
+    void SaveTrainClusterResult(const string& filename);
+    void SaveTestAbnormalClusterResult(const string& filename);
 
 public:
-    explicit MiniBatchKMeansDetector(std::shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                                     std::shared_ptr<GraphFeatureExtractor> graphExtractor,
-                                     std::shared_ptr<DataLoader> loader)
-        : Detector(flowExtractor, graphExtractor, loader), model_config_(), mbk_(model_config_){};
+    explicit MiniBatchKMeansDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
+                                     shared_ptr<GraphFeatureExtractor> graphExtractor,
+                                     shared_ptr<DataLoader> loader)
+        : Detector(flowExtractor, graphExtractor, loader), 
+          model_config_(), 
+          mbk_(model_config_){};
 
     void run_detection(void);
     void run(void) override;

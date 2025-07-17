@@ -5,16 +5,16 @@
 #include <memory>
 
 struct FlowRecord {
-    std::string src_ip;
-    std::string dst_ip;
+    uint32_t src_ip;
+    uint32_t dst_ip;
     uint16_t src_port;
     uint16_t dst_port;
     uint16_t proto;
 
     timespec ts_start;
     timespec ts_end;
-    int packets;
-    int bytes;
+    size_t packets;
+    size_t bytes;
 
     double get_duration() const
     {

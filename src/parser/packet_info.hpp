@@ -28,9 +28,9 @@ using pkt_ts_t = timespec;
 using pkt_code_t = uint16_t;
 using stack_code_t = uint16_t;
 
-union pkt_addr6_union {
-    pkt_addr6_t num_rep;
-    array<uint8_t, 16> byte_rep;
+union __pkt_addr6 {
+    __uint128_t num_rep;
+    uint8_t byte_rep[16];
 };
 
 enum pkt_type_t : uint8_t {
@@ -154,9 +154,9 @@ inline string get_str_addr(pkt_addr4_t addr) {
 }
 
 inline string get_str_addr(pkt_addr6_t addr) {
-    pkt_addr6_union temp;
-    temp.num_rep = addr;
-    return pcpp::IPv6Address(temp.byte_rep.data()).toString();
+    __pkt_addr6 __t;
+    __t.num_rep = addr;
+    return pcpp::IPv6Address(__t.byte_rep).toString();
 }
 
 inline pkt_addr4_t convert_str_addr4(const string& str) {
@@ -168,9 +168,9 @@ inline pkt_addr4_t convert_str_addr4(const string& str) {
 inline pkt_addr6_t convert_str_addr6(const string& str) {
     pcpp::IPv6Address ip(str);
     if (!ip.isValid()) throw invalid_argument("Invalid IPv6 address: " + str);
-    pkt_addr6_union temp;
-    memcpy(temp.byte_rep.data(), ip.toBytes(), 16);
-    return temp.num_rep;
+    __pkt_addr6 __t;
+    memcpy(__t.byte_rep, ip.toBytes(), sizeof(__t));
+    return __t.num_rep;
 }
 
 inline __uint128_t string_2_uint128(const string& str) {
