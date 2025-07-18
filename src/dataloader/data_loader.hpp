@@ -26,11 +26,13 @@ public:
     virtual ~DataLoader() = default;
     virtual void Load() = 0;
     
-    const auto& getAllData()    const { return all_data_ptr_; }
-    const auto& getTrainData()  const { return train_data_ptr_; }
-    const auto& getTestData()   const { return test_data_ptr_; }
-    const auto& getDataPath()   const { return data_path_; }
-    
+    const auto& getAllData()   const { return all_data_ptr_; }
+    const auto& getTrainData() const { return train_data_ptr_; }
+    const auto& getTestData()  const { return test_data_ptr_; }
+    const auto& getDataPath()  const { return data_path_; }
+
+    const auto getDataFileBaseName() const -> decltype(data_path_);
+
     void setDataPath(const string &path) { data_path_ = path; }
 };
 

@@ -82,7 +82,7 @@ void RFDetector::run_detection(void)
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
         arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec graphVec = graphExtractor_->extract(flow);
 
         if (flowVec.n_elem == 0 || graphVec.n_elem == 0) continue;
         arma::vec feat = arma::join_vert(flowVec, graphVec);
@@ -153,9 +153,9 @@ void RFDetector::run(void)
 
     for (const auto &[flow, label] : train_flows)
     {
-        graphExtractor_->updateGraph(flow.src_ip, flow.dst_ip);
+        graphExtractor_->updateGraph(flow);
         arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec graphVec = graphExtractor_->extract(flow);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
         addSample(arma::join_vert(flowVec, graphVec), label);

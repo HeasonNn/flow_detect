@@ -5,7 +5,6 @@
 #include "dataloader/data_loader.hpp"
 #include "detector/detector.hpp"
 
-
 DEFINE_string(config, "../config/config.json",  "Configuration file location.");
 
 int main(int argc, char *argv[])
@@ -34,7 +33,7 @@ int main(int argc, char *argv[])
 
     auto flowExtractor = make_shared<FlowFeatureExtractor>();
     auto graphExtractor = make_shared<GraphFeatureExtractor>();
-    
+
     auto loader = createDataLoader(config_j);
     auto detector = createDetector(flowExtractor, graphExtractor, loader, config_j);
 

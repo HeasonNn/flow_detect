@@ -3,11 +3,6 @@
 namespace fs = filesystem;
 
 
-void MiniBatchKMeansDetector::AddSample(const arma::vec& x) {
-    sample_vecs_.push_back(x);
-}
-
-
 void MiniBatchKMeansDetector::Train() {
     if (trained_ || sample_vecs_.empty()) return;
 
@@ -87,7 +82,7 @@ void MiniBatchKMeansDetector::run_detection(void) {
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
         arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec graphVec = graphExtractor_->extract(flow);
 
         arma::vec feat = arma::join_vert(flowVec, graphVec);
         size_t pred = Predict(feat);
@@ -155,12 +150,12 @@ void MiniBatchKMeansDetector::run(void) {
     for (const auto &[flow, label] : train_flows)
     {
         if(label) continue;
-        graphExtractor_->updateGraph(flow.src_ip, flow.dst_ip);
+        graphExtractor_->updateGraph(flow);
         arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec graphVec = graphExtractor_->extract(flow);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
-        AddSample(arma::join_vert(flowVec, graphVec));
+        addSample(arma::join_vert(flowVec, graphVec));
 
         if (++count % print_interval == 0 || count == total) {
             cout << "\rProcessed " << count << " / " << total << " samples." << flush;
@@ -296,7 +291,7 @@ void MiniBatchKMeansDetector::SaveTestAbnormalClusterResult(const std::string& f
         size_t label = pair.second;
 
         arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        arma::vec graphVec = graphExtractor_->extract(flow);
         arma::vec feat = arma::join_vert(flowVec, graphVec);
         auto [cluster, dist] = mbk_.Predict(feat);
 

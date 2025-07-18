@@ -29,3 +29,14 @@ shared_ptr<DataLoader> createDataLoader(const json& config_j)
     
     return nullptr;
 }
+
+
+const auto DataLoader::getDataFileBaseName() const -> decltype(data_path_) {
+    const auto& path = getDataPath();
+    
+    size_t last_slash = path.find_last_of('/');
+    std::string filename = (last_slash == std::string::npos) ? path : path.substr(last_slash + 1);
+
+    size_t last_dot = filename.find_last_of('.');
+    return (last_dot == std::string::npos) ? filename : filename.substr(0, last_dot);
+};

@@ -115,7 +115,7 @@ void HyperVisonLoader::Load()
         fr.proto = stack_code_to_type(stack_code);
 
         fr.ts_start = get_time_spec(flow->get_str_time());
-        fr.ts_start = get_time_spec(flow->get_end_time());
+        fr.ts_end   = get_time_spec(flow->get_end_time());
         fr.packets  = flow->get_p_packet_p_seq()->size();
         fr.bytes    = flow->get_flow_length();
 

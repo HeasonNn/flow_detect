@@ -11,7 +11,6 @@ void MiniBatchKMeans::Train(const arma::mat& data) {
     scaler_.Fit(data);
     scaler_.Transform(data, norm_data);
 
-    // ===== 使用 mlpack 自带的 kmeans++ 初始化中心 =====
     mlpack::KMeans<> kmeansInit;
     arma::Row<size_t> assignments;
     kmeansInit.Cluster(norm_data, k_, assignments, centroids_);
@@ -21,11 +20,9 @@ void MiniBatchKMeans::Train(const arma::mat& data) {
 
     size_t processed_samples = 0;
 
-    // ===== Mini-Batch 迭代 =====
     for (size_t iter = 0; iter < max_iters_; ++iter) {
         auto iter_start = clock::now();
 
-        // —— 随机采样一个 mini-batch ——
         arma::uvec indices = arma::randi<arma::uvec>(batch_size_, arma::distr_param(0, n - 1));
         arma::mat batch = norm_data.cols(indices);
         processed_samples += batch_size_;
@@ -57,10 +54,8 @@ void MiniBatchKMeans::Train(const arma::mat& data) {
 
 
 std::pair<size_t, double> MiniBatchKMeans::Predict(const arma::vec& X) {
-
     arma::vec norm_X;
-    scaler_.Transform(X, norm_X);  // 归一化
-
+    scaler_.Transform(X, norm_X);
     double minDist = arma::datum::inf;
     size_t bestCluster = 0;
 

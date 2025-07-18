@@ -2,71 +2,16 @@
 
 #include "detector.hpp"
 
-#include <iomanip>
-
 
 namespace fs = filesystem;
 
 
-void DBscanDetector::addSample(const arma::vec &sample) {
-    sample_vecs_.push_back(sample);
-}
+void DBscanDetector::aggregate(void) {
+    auto all_flows = loader_->getAllData();
+    auto edge_constructor = make_shared<EdgeConstructor>(all_flows);
 
-
-void DBscanDetector::printSamples() const {
-    if (sample_vecs_.empty()) {
-        std::cout << "[printSamples] No sample vectors available.\n";
-        return;
-    }
-
-    size_t dim = sample_vecs_[0].n_elem;
-    size_t n_samples = sample_vecs_.size();
-
-    arma::mat mat(dim, n_samples);
-    for (size_t i = 0; i < n_samples; ++i) {
-        mat.col(i) = sample_vecs_[i];
-    }
-
-    arma::rowvec mean = arma::mean(mat, 1).t();
-    arma::rowvec max = arma::max(mat, 1).t();
-    arma::rowvec median = arma::median(mat, 1).t();
-
-    std::cout << "[printSamples] Sample Stats (per feature dimension):\n";
-    std::cout << std::left
-            << std::setw(8) << "Feature"
-            << std::setw(15) << "Mean"
-            << std::setw(15) << "Max"
-            << std::setw(15) << "Median"
-            << std::setw(15) << "Mode"
-            << "\n";
-
-    for (size_t i = 0; i < dim; ++i) {
-        arma::vec values = mat.row(i).t();
-
-        // === 众数计算 ===
-        std::unordered_map<double, size_t> freq;
-        for (size_t j = 0; j < values.n_elem; ++j) {
-            double v = values[j];
-            freq[v]++;
-        }
-
-        double mode = values[0];
-        size_t max_count = 0;
-        for (const auto& [val, count] : freq) {
-            if (count > max_count) {
-                max_count = count;
-                mode = val;
-            }
-        }
-
-    std::cout << std::left
-              << std::setw(8) << i
-              << std::setw(15) << std::fixed << std::setprecision(4) << mean[i]
-              << std::setw(15) << std::fixed << std::setprecision(4) << max[i]
-              << std::setw(15) << std::fixed << std::setprecision(4) << median[i]
-              << std::setw(15) << std::fixed << std::setprecision(4) << mode
-              << "\n";
-    }
+    edge_constructor->ClassifyFlow();
+    edge_constructor->AggregateFlow();
 }
 
 
@@ -208,14 +153,6 @@ void DBscanDetector::detect(const vector<pair<FlowRecord, size_t>>& flows) {
     fout.close();
 }
 
-void DBscanDetector::aggreagte(void) {
-    auto all_flows = loader_->getAllData();
-    auto edge_constructor = make_shared<EdgeConstructor>(all_flows);
-
-    edge_constructor->ClassifyFlow();
-    edge_constructor->AggregateFlow();
-}
-
 
 void DBscanDetector::run(void) {
     const auto& all_flows = *loader_->getAllData();
@@ -226,12 +163,12 @@ void DBscanDetector::run(void) {
     // aggreagte();
 
     for (const auto &[flow, label] : all_flows) {
-        graphExtractor_->updateGraph(flow.src_ip, flow.dst_ip);
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow.src_ip, flow.dst_ip);
+        graphExtractor_->advance_time(GET_DOUBLE_TS(flow.ts_start));
+        graphExtractor_->updateGraph(flow);
+        arma::vec graphVec = graphExtractor_->extract(flow);
 
-        if (flowVec.is_empty() || graphVec.is_empty()) continue;
-        addSample(arma::join_vert(flowVec, graphVec));
+        if (graphVec.is_empty()) continue;
+        addSample(graphVec);
 
         if (++count % print_interval == 0 || count == total) {
             cout << "\rProcessed " << count << " / " << total << " samples." << flush;
@@ -245,3 +182,23 @@ void DBscanDetector::run(void) {
 
     detect(all_flows);
 }
+
+
+// {
+//     "data_loader": {
+//         "data_type": "CICIDS",
+//         "data_path": "/home/a/data/TrafficLabelling/CICIDS2017.csv",
+//         "label_path": "",
+//         "train_ratio": 0.8,
+//         "data_size": 100000
+//     },
+//     "algorithm": "DBSCAN",
+//     "detector": {
+//         "dbscan_config": {
+//             "epsilon": 0.07,
+//             "min_points": 10,
+//             "outline_threshold": 0.01
+//         },
+//         "window_size": 10000
+//     }
+// }
