@@ -90,25 +90,36 @@ private:
 
 class IsolationForest {
 public:
-    IsolationForest(size_t nTrees, size_t sampleSize, size_t maxDepth)
-        : nTrees(nTrees), sampleSize(sampleSize), maxDepth(maxDepth) {}
+    IsolationForest(int random_seed, size_t nTrees, size_t sampleSize, size_t maxDepth)
+        : random_seed_(random_seed), 
+          nTrees(nTrees), 
+          sampleSize(sampleSize), 
+          maxDepth(maxDepth) {}
 
     void Fit(const arma::mat& data) {
+        arma::arma_rng::set_seed(random_seed_);
+
         trees.clear();
+        vector<unique_ptr<Node>> local_trees(nTrees);
 
         #pragma omp parallel for
-        for (size_t i = 0; i < nTrees; ++i) {
+        for (int i = 0; i < static_cast<int>(nTrees); ++i) {
             arma::uvec indices = arma::randperm(data.n_cols, sampleSize);
             arma::mat sample = data.cols(indices);
             IsolationTree tree(maxDepth);
-            trees.push_back(tree.Fit(sample));
+            local_trees[i] = tree.Fit(sample);
         }
+
+        trees = std::move(local_trees);
     }
 
     double AnomalyScore(const arma::vec& point) const {
         double pathLengthSum = 0.0;
-        for (const auto& tree : trees)
-            pathLengthSum += IsolationTree::PathLength(point, tree);
+
+        #pragma omp parallel for reduction(+:pathLengthSum)
+        for (int i = 0; i < static_cast<int>(trees.size()); ++i) {
+            pathLengthSum += IsolationTree::PathLength(point, trees[i]);
+        }
 
         double avgPathLength = pathLengthSum / nTrees;
         double cn = c_factor(sampleSize);
@@ -116,6 +127,7 @@ public:
     }
 
 private:
+    int random_seed_;
     size_t nTrees;
     size_t sampleSize;
     size_t maxDepth;

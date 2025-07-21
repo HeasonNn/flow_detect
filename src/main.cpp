@@ -23,16 +23,9 @@ int main(int argc, char *argv[])
     } catch (const exception& e) {
         FATAL_ERROR(string("Failed to load or parse config: ") + e.what());
     }
-    
-    const string algorithm = config_j.value("algorithm",  "");
-    const string data_type = config_j.value("data_type",  "");
-    const string data_path = config_j.value("data_path",  "");
-    const string label_path = config_j.value("label_path", "");
-    const double train_ratio = config_j.value("train_ratio", 0.8);
-    const int data_size = config_j.value("data_size", -1);
 
     auto flowExtractor = make_shared<FlowFeatureExtractor>();
-    auto graphExtractor = make_shared<GraphFeatureExtractor>();
+    auto graphExtractor = make_shared<GraphFeatureExtractor>(config_j);
 
     auto loader = createDataLoader(config_j);
     auto detector = createDetector(flowExtractor, graphExtractor, loader, config_j);

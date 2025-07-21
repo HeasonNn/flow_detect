@@ -74,7 +74,8 @@ void IForestDetector::run(){
     vector<size_t> all_preds;
 
     size_t TP = 0, FP = 0, FN = 0, TN = 0;
-
+    size_t count_detect = 0;
+    size_t total_detect = test_flows.size();
     for (const auto& [flow, label] : test_flows) {
         graphExtractor_->advance_time(GET_DOUBLE_TS(flow.ts_start));
         graphExtractor_->updateGraph(flow);
@@ -99,7 +100,12 @@ void IForestDetector::run(){
         else if (label == 0 && pred == 0) TN++;
         else if (label == 0 && pred == 1) FP++;
         else if (label == 1 && pred == 0) FN++;
+
+        if (++count_detect % print_interval == 0 || count_detect == total_detect) {
+            cout << "\rDetected " << count_detect << " / " << total_detect << " samples." << flush;
+        }
     }
+    cout << endl;
     ofs.close();
 
     size_t sum       = TP + TN + FP + FN;

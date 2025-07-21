@@ -17,8 +17,8 @@ shared_ptr<Detector> createDetector(shared_ptr<FlowFeatureExtractor> flowExtract
                                     shared_ptr<DataLoader> loader,
                                     const json& config_j)
 {
-    const string& algorithm = config_j["algorithm"];
     const json& detector_config = config_j["detector"];
+    const string& algorithm     = detector_config.value("algorithm", "Unknown");
 
     if (algorithm == "RF") {
         return make_shared<RFDetector>(flowExtractor, graphExtractor, loader);

@@ -29,9 +29,7 @@ protected:
 
     virtual void addSample(const arma::vec &x) {sample_vecs_.push_back(x);}
     virtual void pcaAnalyze();
-    
     virtual void printSamples() const;
-
 
 public:
 
@@ -48,7 +46,6 @@ public:
     virtual ~Detector() = default;
 
     virtual void run() = 0;
-
 };
 
 
@@ -165,9 +162,12 @@ private:
     size_t sample_size_;
     size_t max_depth_;
 
+    int random_seed_;
+
     mlpack::data::MinMaxScaler scaler_;
     unique_ptr<IsolationForest> iforest_;
     double outline_threshold_;
+
 public:
     explicit IForestDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
                              shared_ptr<GraphFeatureExtractor> graphExtractor,
@@ -177,18 +177,19 @@ public:
           config_(config)
         {
             const json& iforest_config_ = config_["iforest_config"];
-
+            random_seed_       = config_.value("random_seed", 2025);
             n_trees_           = iforest_config_.value("n_trees", 100);
             sample_size_       = iforest_config_.value("sample_size", 64);
             max_depth_         = iforest_config_.value("max_depth", 10);
             outline_threshold_ = iforest_config_.value("outline_threshold", 0.1);
             
-            iforest_ = make_unique<IsolationForest>(n_trees_, sample_size_, max_depth_);
+            iforest_ = make_unique<IsolationForest>(random_seed_, n_trees_, sample_size_, max_depth_);
 
-            cout << "n_trees_: "           << n_trees_     << ", "
-                 << "minPoints_: "         << sample_size_ << ", "
-                 << "outline_threshold_: " << max_depth_   << ", "
-                 << "minPoints_: "         << sample_size_ << "\n";
+            cout << "random_seed: "       << random_seed_       << ", "
+                 << "n_trees: "           << n_trees_           << ", "
+                 << "sample_size: "       << sample_size_       << ", "
+                 << "max_depth: "         << max_depth_         << ", "
+                 << "outline_threshold: " << outline_threshold_ << "\n";
         };
 
     void Train();
