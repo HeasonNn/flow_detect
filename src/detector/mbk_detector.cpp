@@ -79,10 +79,13 @@ void MiniBatchKMeansDetector::run_detection(void) {
 
     cout << "\n🔎 Running Mini-Batch-KMeans Detection:\n";
 
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
+
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        arma::vec flowVec = flowExtractor->extract(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         arma::vec feat = arma::join_vert(flowVec, graphVec);
         size_t pred = Predict(feat);
@@ -147,12 +150,15 @@ void MiniBatchKMeansDetector::run(void) {
     size_t count = 0;
     size_t print_interval = 1000;
 
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
+
     for (const auto &[flow, label] : train_flows)
     {
         if(label) continue;
-        graphExtractor_->updateGraph(flow);
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        graphExtractor->updateGraph(flow);
+        arma::vec flowVec = flowExtractor->extract(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
         addSample(arma::join_vert(flowVec, graphVec));
@@ -285,13 +291,16 @@ void MiniBatchKMeansDetector::SaveTestAbnormalClusterResult(const std::string& f
     std::ofstream ofs(filename);
     ofs << "Index,SrcIP,DstIP,Cluster,Distance,Label\n";
 
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
+
     size_t index = 0;
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
         size_t label = pair.second;
 
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        arma::vec flowVec = flowExtractor->extract(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
         arma::vec feat = arma::join_vert(flowVec, graphVec);
         auto [cluster, dist] = mbk_.Predict(feat);
 

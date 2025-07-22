@@ -161,11 +161,12 @@ void DBscanDetector::run(void) {
     size_t print_interval = 1000;
 
     // aggreagte();
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
 
     for (const auto &[flow, label] : all_flows) {
-        graphExtractor_->advance_time(GET_DOUBLE_TS(flow.ts_start));
-        graphExtractor_->updateGraph(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
+        graphExtractor->updateGraph(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         if (graphVec.is_empty()) continue;
         addSample(graphVec);

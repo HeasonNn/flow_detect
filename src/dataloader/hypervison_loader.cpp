@@ -123,6 +123,15 @@ void HyperVisonLoader::Load()
         all.emplace_back(fr, label);
     }
 
+    auto compare_fn = [] (const pair<FlowRecord, size_t>& a, const pair<FlowRecord, size_t>& b) -> bool 
+    {
+        if (a.first.ts_start.tv_sec != b.first.ts_start.tv_sec) {
+            return a.first.ts_start.tv_sec < b.first.ts_start.tv_sec;
+        }
+        return a.first.ts_start.tv_nsec < b.first.ts_start.tv_nsec;
+    };
+    sort(all.begin(), all.end(), compare_fn);
+
     size_t train_size = static_cast<size_t>(train_ratio_ * all.size());
     all_data_ptr_->assign(all.begin(), all.end());
     train_data_ptr_->assign(all.begin(), all.begin() + train_size);

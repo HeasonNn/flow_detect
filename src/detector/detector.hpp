@@ -21,8 +21,7 @@ using namespace std;
 class Detector
 {
 protected:
-    shared_ptr<FlowFeatureExtractor> flowExtractor_;
-    shared_ptr<GraphFeatureExtractor> graphExtractor_;
+    const json& config_;
     shared_ptr<DataLoader> loader_;
 
     vector<arma::vec> sample_vecs_;
@@ -32,20 +31,15 @@ protected:
     virtual void printSamples() const;
 
 public:
-
-    explicit Detector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                      shared_ptr<GraphFeatureExtractor> graphExtractor,
-                      shared_ptr<DataLoader> loader)
-        : flowExtractor_(move(flowExtractor)), 
-          graphExtractor_(move(graphExtractor)), 
-          loader_(move(loader)) 
+    explicit Detector(shared_ptr<DataLoader> loader, const json& config)
+        : loader_(move(loader)), config_(config)
         {
             loader_->Load();
         }
 
     virtual ~Detector() = default;
 
-    virtual void run() = 0;
+    virtual void run();
 };
 
 
@@ -64,10 +58,8 @@ private:
     void printFeatures(void) const noexcept;
 
 public:
-    explicit RFDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                        shared_ptr<GraphFeatureExtractor> graphExtractor,
-                        shared_ptr<DataLoader> loader)
-        : Detector(flowExtractor, graphExtractor, loader) {};
+    explicit RFDetector(shared_ptr<DataLoader> loader, const json& config)
+        : Detector(loader, config) {};
 
     void run(void) override;
 };
@@ -99,10 +91,8 @@ private:
     void SaveTestAbnormalClusterResult(const string& filename);
 
 public:
-    explicit MiniBatchKMeansDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                                     shared_ptr<GraphFeatureExtractor> graphExtractor,
-                                     shared_ptr<DataLoader> loader)
-        : Detector(flowExtractor, graphExtractor, loader), 
+    explicit MiniBatchKMeansDetector(shared_ptr<DataLoader> loader, const json& config)
+        : Detector(loader, config), 
           model_config_(), 
           mbk_(model_config_){};
 
@@ -118,8 +108,6 @@ struct DBSCANModel {
 
 class DBscanDetector : public Detector {
 private:
-    const json& config_;    
-
     double epsilon_;
     size_t min_points_;
     double outline_threshold_;
@@ -133,16 +121,12 @@ private:
     void detect(const vector<pair<FlowRecord, size_t>>& flows);
 
 public:
-    explicit DBscanDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                            shared_ptr<GraphFeatureExtractor> graphExtractor,
-                            shared_ptr<DataLoader> loader,
-                            const json& config)
-        : Detector(flowExtractor, graphExtractor, loader), 
-          config_(config)
+    explicit DBscanDetector(shared_ptr<DataLoader> loader, const json& config)
+        : Detector(loader, config)
     {
-        const json& dbscan_config_ = config_["dbscan_config"];
-        epsilon_ = dbscan_config_.value("epsilon", 0.1);
-        min_points_ = dbscan_config_.value("min_points", 10);
+        const json& dbscan_config_ = config_["detector"]["dbscan_config"];
+        epsilon_           = dbscan_config_.value("epsilon", 0.1);
+        min_points_        = dbscan_config_.value("min_points", 10);
         outline_threshold_ = dbscan_config_.value("outline_threshold", 0.65);
 
         cout << "epsilon_: "           << epsilon_ << ", "
@@ -155,9 +139,7 @@ public:
 
 
 class IForestDetector : public Detector{
-private:
-    const json& config_;
-    
+private:    
     size_t n_trees_;
     size_t sample_size_;
     size_t max_depth_;
@@ -169,15 +151,11 @@ private:
     double outline_threshold_;
 
 public:
-    explicit IForestDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                             shared_ptr<GraphFeatureExtractor> graphExtractor,
-                             shared_ptr<DataLoader> loader,
-                             const json& config)
-        : Detector(flowExtractor, graphExtractor, loader),
-          config_(config)
+    explicit IForestDetector(shared_ptr<DataLoader> loader, const json& config)
+        : Detector(loader, config)
         {
-            const json& iforest_config_ = config_["iforest_config"];
-            random_seed_       = config_.value("random_seed", 2025);
+            const json& iforest_config_ = config_["detector"]["iforest_config"];
+            random_seed_       = iforest_config_.value("random_seed", 2025);
             n_trees_           = iforest_config_.value("n_trees", 100);
             sample_size_       = iforest_config_.value("sample_size", 64);
             max_depth_         = iforest_config_.value("max_depth", 10);
@@ -194,14 +172,11 @@ public:
 
     void Train();
     double Detect(arma::vec& sample_vec);
-
+    
+    void DetectByGraphFeature(void);
     void run(void) override;
 };
 
 
-shared_ptr<Detector> createDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                                    shared_ptr<GraphFeatureExtractor> graphExtractor,
-                                    shared_ptr<DataLoader> loader,
-                                    const json& config_j);
-
+shared_ptr<Detector> createDetector(const json& config_j);
 string get_current_time_str(void);

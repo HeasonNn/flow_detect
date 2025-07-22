@@ -5,6 +5,8 @@
 #include "dataloader/data_loader.hpp"
 #include "detector/detector.hpp"
 
+
+
 DEFINE_string(config, "../config/config.json",  "Configuration file location.");
 
 int main(int argc, char *argv[])
@@ -24,12 +26,7 @@ int main(int argc, char *argv[])
         FATAL_ERROR(string("Failed to load or parse config: ") + e.what());
     }
 
-    auto flowExtractor = make_shared<FlowFeatureExtractor>();
-    auto graphExtractor = make_shared<GraphFeatureExtractor>(config_j);
-
-    auto loader = createDataLoader(config_j);
-    auto detector = createDetector(flowExtractor, graphExtractor, loader, config_j);
-
+    auto detector = createDetector(config_j);
     detector->run();
 
     __STOP_FTIMER__

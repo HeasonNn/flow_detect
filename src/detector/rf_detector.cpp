@@ -79,10 +79,13 @@ void RFDetector::run_detection(void)
 
     cout << "\n🔎 Predicting:\n";
 
+
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        arma::vec flowVec = flowExtractor->extract(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         if (flowVec.n_elem == 0 || graphVec.n_elem == 0) continue;
         arma::vec feat = arma::join_vert(flowVec, graphVec);
@@ -151,11 +154,14 @@ void RFDetector::run(void)
     size_t count = 0;
     size_t print_interval = 1000;
 
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
+
     for (const auto &[flow, label] : train_flows)
     {
-        graphExtractor_->updateGraph(flow);
-        arma::vec flowVec = flowExtractor_->extract(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        graphExtractor->updateGraph(flow);
+        arma::vec flowVec = flowExtractor->extract(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         if (flowVec.is_empty() || graphVec.is_empty()) continue;
         addSample(arma::join_vert(flowVec, graphVec), label);

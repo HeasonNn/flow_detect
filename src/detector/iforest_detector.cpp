@@ -29,18 +29,19 @@ double IForestDetector::Detect(arma::vec& sample_vec) {
 }
 
 
-void IForestDetector::run(){
+void IForestDetector::DetectByGraphFeature() {
     const auto& train_flows = *loader_->getTrainData();
     size_t total = train_flows.size();
     size_t count = 0;
     size_t print_interval = 1000;
 
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+
     for (const auto &[flow, label] : train_flows) {
         if(label) continue;
-
-        graphExtractor_->advance_time(GET_DOUBLE_TS(flow.ts_start));
-        graphExtractor_->updateGraph(flow);
-        arma::vec graphVec = graphExtractor_->extract(flow);
+        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
+        graphExtractor->updateGraph(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
 
         if (graphVec.is_empty()) continue;
         addSample(graphVec);
@@ -70,17 +71,20 @@ void IForestDetector::run(){
     ofs << "SrcIP,DstIP,Score,Pred,Label\n";
 
     arma::mat all_test_vecs;
+    all_test_vecs.set_size(16, test_flows.size());  // 预分配
     vector<size_t> all_labels;
     vector<size_t> all_preds;
 
     size_t TP = 0, FP = 0, FN = 0, TN = 0;
     size_t count_detect = 0;
+    size_t valid_detect = 0;
     size_t total_detect = test_flows.size();
-    for (const auto& [flow, label] : test_flows) {
-        graphExtractor_->advance_time(GET_DOUBLE_TS(flow.ts_start));
-        graphExtractor_->updateGraph(flow);
 
-        arma::vec sample = graphExtractor_->extract(flow);
+    for (const auto& [flow, label] : test_flows) {
+        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
+        graphExtractor->updateGraph(flow);
+        arma::vec sample = graphExtractor->extract(flow);
+
         if (sample.is_empty()) continue;
         arma::vec norm_data;
         scaler_.Transform(sample, norm_data);
@@ -92,7 +96,7 @@ void IForestDetector::run(){
         ofs << flow.src_ip << "," << flow.dst_ip << ","
             << score << "," << pred << "," << label << "\n";
 
-        all_test_vecs.insert_cols(all_test_vecs.n_cols, norm_data);
+        all_test_vecs.col(valid_detect++) = norm_data;
         all_labels.push_back(label);
         all_preds.push_back(is_anomaly);
 
@@ -123,10 +127,10 @@ void IForestDetector::run(){
     cout << "📈 F1-Score  : " << f1 * 100 << "%\n";
     cout << "📁 Results written to: " << output_file << "\n";
 
-    if (all_test_vecs.n_cols > 0) {
+    if (valid_detect > 0) {
         mlpack::PCA pca;
         arma::mat reduced;
-        pca.Apply(all_test_vecs, reduced, 2);
+        pca.Apply(all_test_vecs.cols(0, valid_detect - 1), reduced, 2);
 
         std::ofstream fout("result/iforest_pca_result.csv");
         fout << "x,y,pred,label\n";
@@ -138,4 +142,8 @@ void IForestDetector::run(){
         }
         fout.close();
     }
+}
+
+void IForestDetector::run(){
+    DetectByGraphFeature();
 }

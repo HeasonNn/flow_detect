@@ -3,10 +3,12 @@
 #include <utility>
 #include <cstdint>
 #include <armadillo>
+#include <deque>
+#include <queue>
 
+#include "robin_hood.hpp"
 #include "../common.hpp"
 #include "flow_feature.hpp"
-#include "fixed_rolling_counter.hpp"
 
 struct hash_pair {
     std::size_t operator()(const std::pair<uint32_t, uint32_t>& p) const noexcept {
@@ -25,49 +27,44 @@ class GraphFeatureExtractor {
 private:
     const json& config_;
 
-    /* 图结构 */
-    using IPSet = robin_hood::unordered_flat_set<uint32_t>;
-    std::unordered_map<uint32_t, IPSet> adj_out;   // src→dst
-    std::unordered_map<uint32_t, IPSet> adj_in;    // dst←src
+    /* 核心图结构 */
+    using IPSet = std::unordered_set<uint32_t>;
+    std::unordered_map<uint32_t, IPSet> adj_out;
+    std::unordered_map<uint32_t, IPSet> adj_in;
 
     /* 活跃度计数 */
     std::unordered_map<uint32_t, int> node_activity;
-    robin_hood::unordered_flat_map<std::pair<uint32_t, uint32_t>, EdgeInfo, hash_pair> edge_activity;
 
-    /* 出度分布维护 */
+    /* 边信息表 */
+    std::unordered_map<std::pair<uint32_t, uint32_t>, EdgeInfo, hash_pair> edge_activity;
+
+    /* 出度分布 */
     std::multiset<size_t> out_degree_distribution;
     std::unordered_map<uint32_t, std::multiset<size_t>::iterator> out_degree_iter;
 
-    /* 滚动计数器 */
-    std::shared_ptr<FixedRollingCounter> dst_counter;
-    std::shared_ptr<FixedRollingCounter> src_counter;
-
-    /* 时间控制 */
-    uint64_t current_ts = 0;
-    uint64_t update_count = 0;
+    /* 时间与资源控制 */
+    uint64_t current_ts_ = 0;
+    uint64_t update_count_ = 0;
     uint64_t prune_interval_;
     uint64_t time_window_;
-
-    size_t edge_limit_;
+    size_t max_nodes_;
+    size_t max_edges_;
     size_t simple_step_;
     size_t update_batch_count_ = 0;
+
+    /* FIFO 队列：用于硬性上限驱逐 (使用 find_if 进行安全删除) */
+    std::deque<std::pair<uint64_t, uint32_t>> node_fifo_queue_;       // <last_active_ts, node_ip>
+    std::deque<std::pair<uint64_t, std::pair<uint32_t, uint32_t>>> edge_fifo_queue_; // <last_active_ts, edge_key>
 
     void prune_inactive();
     void real_update(const FlowRecord& f);
 
+    // FIFO辅助函数 (O(N) 但绝对安全)
+    void remove_from_node_fifo(uint32_t ip);
+    void remove_from_edge_fifo(const std::pair<uint32_t, uint32_t>& edge);
+
 public:
-    explicit GraphFeatureExtractor(const json& config) : config_(config) 
-    {
-        const auto& extractor_config = config_["extractor"];
-        prune_interval_ = extractor_config.value("prune_interval", 10000);
-        time_window_    = extractor_config.value("time_window", 300000);
-        edge_limit_     = extractor_config.value("edge_limit", 1000);
-        simple_step_    = extractor_config.value("simple_step", 1000);
-        
-        size_t rolling_counter_size = extractor_config.value("rolling_counter_size", 65536);
-        dst_counter = std::make_shared<FixedRollingCounter>(time_window_, rolling_counter_size);
-        src_counter = std::make_shared<FixedRollingCounter>(time_window_, rolling_counter_size);
-    };
+    explicit GraphFeatureExtractor(const json& config);
 
     void advance_time(uint64_t ts);
     void updateGraph(const FlowRecord& flow);
@@ -84,4 +81,7 @@ public:
         }
         iter_map[ip] = ms.insert(new_deg);
     }
+
+    size_t active_nodes() const { return node_activity.size(); }
+    size_t active_edges() const { return edge_activity.size(); }
 };

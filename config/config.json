@@ -1,20 +1,20 @@
 {
     "data_loader": {
         "data_type": "HyperVision",
-        "data_path": "/home/a/data/data/dns_lrscan.data",
-        "label_path": "/home/a/data/data/dns_lrscan.label",
+        "data_path": "/home/a/data/data/emotet.data",
+        "label_path": "/home/a/data/data/emotet.label",
         "train_ratio": 0.8,
-        "data_size": 500000
+        "data_size": -1
     },
+    "algorithm": "Analyze",
     "detector": {
-        "algorithm": "IForest",
-        "random_seed": 2025,
         "dbscan_config": {
             "epsilon": 0.07,
             "min_points": 10,
             "outline_threshold": 0.01
         },
         "iforest_config": {
+            "random_seed": 2025,
             "n_trees": 100,
             "sample_size": 256,
             "max_depth": 8,
@@ -22,10 +22,10 @@
         }
     },
     "extractor": {
-        "prune_interval": 10000,
-        "time_window": 10000,
-        "edge_limit": 1000,
-        "simple_step": 1000,
-        "rolling_counter_size": 1000
+        "prune_interval": 50,
+        "time_window": 300,
+        "max_nodes": 5000,
+        "max_edges": 10000,
+        "simple_step": 5
     }
 }

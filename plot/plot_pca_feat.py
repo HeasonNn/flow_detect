@@ -1,27 +1,42 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-# 读取 PCA + label 数据
-df = pd.read_csv("../build/pca_result.csv", header=None, names=["PCA1", "PCA2", "IsAnomaly"])
+# 设置 Seaborn 主题风格
+sns.set(style='whitegrid', font_scale=1.1)
 
-# 拆分正常 vs 异常
-normal = df[df["IsAnomaly"] == 0]
-anomaly = df[df["IsAnomaly"] == 1]
+# 读取数据
+df = pd.read_csv("build/result/pca_result.csv")
 
-# 创建图像
-plt.figure(figsize=(10, 8))
+# 类型转换
+df['label'] = df['label'].astype(int)
 
-# 正常样本：浅蓝色小点
-plt.scatter(normal["PCA1"], normal["PCA2"], c="skyblue", s=8, label="Normal", alpha=0.5)
+# 添加可读列
+df['ground_truth'] = df['label'].map({0: 'Normal', 1: 'Anomaly'})
 
-# 异常样本：红色 x 标记
-plt.scatter(anomaly["PCA1"], anomaly["PCA2"], c="red", s=25, marker="x", label="Anomaly")
+# 定义调色板（现代配色）
+label_palette = {'Normal': '#4CAF50', 'Anomaly': '#F44336'}
 
-# 图形细节
-plt.xlabel("PCA1")
-plt.ylabel("PCA2")
-plt.title("PCA Visualization with Anomaly Labels (0 = normal, 1 = anomaly)")
-plt.legend()
+# 创建图形
+plt.figure(figsize=(8, 6))
+sns.scatterplot(
+    data=df,
+    x='x',
+    y='y',
+    hue='ground_truth',
+    style='ground_truth',
+    palette=label_palette,
+    s=25,
+    edgecolor='black',
+    linewidth=0.05,
+    alpha=0.7
+)
+
+plt.title("Ground Truth (Normal vs Anomaly)", fontsize=14)
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.legend(title="Label", bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout()
 
 # 保存图像

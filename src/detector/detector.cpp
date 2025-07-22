@@ -12,25 +12,27 @@ string get_current_time_str(void) {
 }
 
 
-shared_ptr<Detector> createDetector(shared_ptr<FlowFeatureExtractor> flowExtractor, 
-                                    shared_ptr<GraphFeatureExtractor> graphExtractor,
-                                    shared_ptr<DataLoader> loader,
-                                    const json& config_j)
+shared_ptr<Detector> createDetector(const json& config)
 {
-    const json& detector_config = config_j["detector"];
-    const string& algorithm     = detector_config.value("algorithm", "Unknown");
+    const json& data_loader = config["data_loader"];
+    const string& algorithm = config.value("algorithm", "Unknown");
 
-    if (algorithm == "RF") {
-        return make_shared<RFDetector>(flowExtractor, graphExtractor, loader);
+    auto loader = createDataLoader(data_loader);
+
+    if (algorithm == "Analyze") {
+        return make_shared<Detector>(loader, config);
+    }
+    else if (algorithm == "RF") {
+        return make_shared<RFDetector>(loader, config);
     }
     else if (algorithm == "DBSCAN") {
-        return make_shared<DBscanDetector>(flowExtractor, graphExtractor, loader, detector_config);
+        return make_shared<DBscanDetector>(loader, config);
     }
     else if (algorithm == "Mini_Batch_KMeans") {
-        return make_shared<MiniBatchKMeansDetector>(flowExtractor, graphExtractor, loader);
+        return make_shared<MiniBatchKMeansDetector>(loader, config);
     }
     else if (algorithm == "IForest") {
-        return make_shared<IForestDetector>(flowExtractor, graphExtractor, loader, detector_config);
+        return make_shared<IForestDetector>(loader, config);
     }
     else {
         throw std::invalid_argument("Unknown algorithm type: " + algorithm);
@@ -62,7 +64,8 @@ void Detector::pcaAnalyze() {
     const auto& all_data       = *loader_->getAllData();
     const auto& data_file_name = loader_->getDataFileBaseName();
 
-    std::string output_filename = "result/" + data_file_name + "_pca_analyze.csv";
+    // std::string output_filename = "result/" + data_file_name + "_pca_analyze.csv";
+    std::string output_filename = "result/pca_result.csv";
     std::ofstream fout(output_filename);
     fout << "x,y,label\n";
     for (size_t i = 0; i < reduced.n_cols; ++i) {
@@ -71,6 +74,34 @@ void Detector::pcaAnalyze() {
              << all_data[i].second << "\n";
     }
     fout.close();
+    cout << "📁 Results written to: " << output_filename << "\n";
+}
+
+void Detector::run() {
+    const auto& flows = *loader_->getAllData();
+    size_t total = flows.size();
+    size_t count = 0;
+    size_t print_interval = 1000;
+
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+
+    for (const auto &[flow, label] : flows) {
+        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
+        graphExtractor->updateGraph(flow);
+        arma::vec graphVec = graphExtractor->extract(flow);
+
+        if (graphVec.is_empty()) continue;
+        addSample(graphVec);
+
+        if (++count % print_interval == 0 || count == total) {
+            cout << "\rProcessed " << count << " / " << total << " samples." << flush;
+        }
+    }
+    cout << endl; 
+    printSamples();
+
+    cout << "🔄 Start PCA Analyze: " << "\n";
+    pcaAnalyze();
 }
 
 
