@@ -33,7 +33,7 @@ private:
     std::unordered_map<uint32_t, IPSet> adj_in;
 
     /* 活跃度计数 */
-    std::unordered_map<uint32_t, int> node_activity;
+    std::unordered_map<uint32_t, size_t> node_activity;
 
     /* 边信息表 */
     std::unordered_map<std::pair<uint32_t, uint32_t>, EdgeInfo, hash_pair> edge_activity;

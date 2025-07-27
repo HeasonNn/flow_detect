@@ -26,10 +26,10 @@ sns.scatterplot(
     hue='ground_truth',
     style='ground_truth',
     palette=label_palette,
-    s=25,
+    s=10,
     edgecolor='black',
-    linewidth=0.05,
-    alpha=0.7
+    linewidth=0.001,
+    alpha=0.25
 )
 
 plt.title("Ground Truth (Normal vs Anomaly)", fontsize=14)

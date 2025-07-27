@@ -1,12 +1,12 @@
 {
     "data_loader": {
         "data_type": "HyperVision",
-        "data_path": "/home/a/data/data/emotet.data",
-        "label_path": "/home/a/data/data/emotet.label",
+        "data_path": "/home/a/data/data/dns_lrscan.data",
+        "label_path": "/home/a/data/data/dns_lrscan.label",
         "train_ratio": 0.8,
-        "data_size": -1
+        "data_size": 100000
     },
-    "algorithm": "Analyze",
+    "algorithm": "Mix",
     "detector": {
         "dbscan_config": {
             "epsilon": 0.07,
@@ -19,6 +19,14 @@
             "sample_size": 256,
             "max_depth": 8,
             "outline_threshold": 0.5
+        },
+        "dbstream_config" : {
+            "epsilon": 0.5,
+            "lambda": 0.01,
+            "mu" : 1.0,
+            "beta_merge": 0.6,
+            "beta_noise": 0.2,
+            "max_clusters": 300
         }
     },
     "extractor": {

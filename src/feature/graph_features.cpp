@@ -306,36 +306,31 @@ void GraphFeatureExtractor::remove_from_edge_fifo(const std::pair<uint32_t, uint
 arma::vec GraphFeatureExtractor::extract(const FlowRecord& flow) {
     const uint32_t src = flow.src_ip;
     const uint32_t dst = flow.dst_ip;
-    const uint64_t ts = flow.ts_end.tv_sec * 1000ULL + flow.ts_end.tv_nsec / 1000000ULL;
+    arma::vec v(13, arma::fill::zeros);
 
-    arma::vec v(16, arma::fill::zeros);
     size_t out_src = adj_out.count(src) ? adj_out[src].size() : 0;
+    size_t out_dst = adj_out.count(dst) ? adj_out[dst].size() : 0;
     size_t in_dst  = adj_in.count(dst)  ? adj_in[dst].size()  : 0;
+    size_t in_src  = adj_in.count(src)  ? adj_in[src].size()  : 0;
+    auto cur_edge_activity = edge_activity.count({src, dst}) ? edge_activity[{src, dst}].count : 0;
 
-    v(0) = static_cast<double>(out_src);
-    v(1) = static_cast<double>(in_dst);
-    v(2) = node_activity.size() ? v(0) / node_activity.size() : 0.0;
-    v(3) = node_activity.size() ? v(1) / node_activity.size() : 0.0;
-    v(4) = edge_activity.count({dst, src}) ? 1.0 : 0.0;
-    v(5) = edge_activity.count({src, dst}) ? edge_activity[{src, dst}].count : 0.0;
-    v(6) = edge_activity.count({dst, src}) ? edge_activity[{dst, src}].count : 0.0;
-    v(7) = (out_src > 0) ? std::log2(static_cast<double>(out_src)) : 0.0;
-    v(8) = static_cast<double>(out_src) / (1.0 + in_dst);
-
-    if (!out_degree_distribution.empty()) {
-        auto it = out_degree_distribution.lower_bound(out_src);
-        v(9) = static_cast<double>(std::distance(out_degree_distribution.begin(), it)) /
-               out_degree_distribution.size();
-    }
+    // Reordered features
+    v(0) = static_cast<double>(out_src);                   // Source node out-degree
+    v(1) = static_cast<double>(out_dst);                    // Destination node in-degree
+    v(2) = static_cast<double>(in_src);                   // Source node out-degree
+    v(3) = static_cast<double>(in_dst);                    // Destination node in-degree
+    v(4) = node_activity.size() ? v(0) / node_activity.size() : 0.0;  // Source node out-degree / active nodes
+    v(5) = node_activity.size() ? v(1) / node_activity.size() : 0.0;  // Destination node in-degree / active nodes
+    v(6) = adj_out[src].size() + adj_in[src].size();      // Source node total degree (out + in)
+    v(7) = adj_out[dst].size() + adj_in[dst].size();      // Destination node total degree (out + in)
+    v(8) = static_cast<double>(out_src) / (1.0 + in_dst);  // Out-degree to in-degree ratio
 
     const double duration = flow.get_duration();
     const double avg_len = (flow.packets > 0) ? static_cast<double>(flow.bytes) / flow.packets : 0.0;
-    v(10) = flow.proto;
-    v(11) = is_well_known_port(flow.src_port) || is_well_known_port(flow.dst_port) ? 1.0 : 0.0;
-    v(12) = std::log1p(std::max(0.0, duration));
-    v(13) = std::log1p(avg_len);
-    v(14) = std::log1p(flow.packets);
-    v(15) = std::log1p(flow.bytes);
+    v(9) = flow.proto;
+    v(10) = std::log1p(std::max(0.0, duration));  // Log of flow duration
+    v(11) = std::log1p(flow.packets);  // Log of number of packets
+    v(12) = std::log1p(flow.bytes);  // Log of bytes transferred
 
     return v;
 }

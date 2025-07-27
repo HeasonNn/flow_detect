@@ -14,6 +14,7 @@
 #include "../dataloader/data_loader.hpp"
 #include "../graph_construct/edge_constructor.hpp"
 #include "../algorithm/isolation_forest.hpp"
+#include "../algorithm/dbstream.hpp" 
 
 using namespace std;
 
@@ -151,29 +152,41 @@ private:
     double outline_threshold_;
 
 public:
-    explicit IForestDetector(shared_ptr<DataLoader> loader, const json& config)
-        : Detector(loader, config)
-        {
-            const json& iforest_config_ = config_["detector"]["iforest_config"];
-            random_seed_       = iforest_config_.value("random_seed", 2025);
-            n_trees_           = iforest_config_.value("n_trees", 100);
-            sample_size_       = iforest_config_.value("sample_size", 64);
-            max_depth_         = iforest_config_.value("max_depth", 10);
-            outline_threshold_ = iforest_config_.value("outline_threshold", 0.1);
-            
-            iforest_ = make_unique<IsolationForest>(random_seed_, n_trees_, sample_size_, max_depth_);
-
-            cout << "random_seed: "       << random_seed_       << ", "
-                 << "n_trees: "           << n_trees_           << ", "
-                 << "sample_size: "       << sample_size_       << ", "
-                 << "max_depth: "         << max_depth_         << ", "
-                 << "outline_threshold: " << outline_threshold_ << "\n";
-        };
+    explicit IForestDetector(shared_ptr<DataLoader> loader, const json& config);
 
     void Train();
     double Detect(arma::vec& sample_vec);
     
     void DetectByGraphFeature(void);
+    void run(void) override;
+};
+
+
+class MixDetector : public Detector{
+private:
+    int random_seed_;
+
+    // iForest params
+    size_t n_trees_;
+    size_t sample_size_;
+    size_t max_depth_;
+
+    // DBStream params
+    double epsilon_;
+    double lambda_;
+    double mu_;
+    double beta_merge_;
+    double beta_noise_;
+    double max_clusters_;
+
+    double outline_threshold_;
+
+    mlpack::data::MinMaxScaler scaler_;
+public:
+    explicit MixDetector(shared_ptr<DataLoader> loader, const json& config);
+
+    void Train();
+    void Detect();
     void run(void) override;
 };
 

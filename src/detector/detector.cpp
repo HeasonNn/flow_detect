@@ -34,6 +34,9 @@ shared_ptr<Detector> createDetector(const json& config)
     else if (algorithm == "IForest") {
         return make_shared<IForestDetector>(loader, config);
     }
+    else if (algorithm == "Mix"){
+        return make_shared<MixDetector>(loader, config);
+    }
     else {
         throw std::invalid_argument("Unknown algorithm type: " + algorithm);
     }

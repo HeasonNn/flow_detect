@@ -3,6 +3,27 @@
 namespace fs = filesystem;
 
 
+IForestDetector::IForestDetector(shared_ptr<DataLoader> loader, 
+                                 const json& config)
+    : Detector(loader, config) 
+{
+    const json& iforest_config_ = config_["detector"]["iforest_config"];
+    random_seed_       = iforest_config_.value("random_seed", 2025);
+    n_trees_           = iforest_config_.value("n_trees", 100);
+    sample_size_       = iforest_config_.value("sample_size", 64);
+    max_depth_         = iforest_config_.value("max_depth", 10);
+    outline_threshold_ = iforest_config_.value("outline_threshold", 0.1);
+    
+    iforest_ = make_unique<IsolationForest>(random_seed_, n_trees_, sample_size_, max_depth_);
+
+    cout << "random_seed: "       << random_seed_       << ", "
+         << "n_trees: "           << n_trees_           << ", "
+         << "sample_size: "       << sample_size_       << ", "
+         << "max_depth: "         << max_depth_         << ", "
+         << "outline_threshold: " << outline_threshold_ << "\n";
+}
+
+
 void IForestDetector::Train(){
     if (sample_vecs_.empty()) {
         std::cerr << "⚠️  No valid samples collected for training!\n";
@@ -57,7 +78,6 @@ void IForestDetector::DetectByGraphFeature() {
     cout << "🔄 Start train: " << "\n";
     Train();
 
-
     cout << "🔄 Start detect: " << "\n";
     const auto& test_flows = *loader_->getTestData();
 
@@ -71,7 +91,7 @@ void IForestDetector::DetectByGraphFeature() {
     ofs << "SrcIP,DstIP,Score,Pred,Label\n";
 
     arma::mat all_test_vecs;
-    all_test_vecs.set_size(16, test_flows.size());  // 预分配
+    all_test_vecs.set_size(13, test_flows.size());  // 预分配
     vector<size_t> all_labels;
     vector<size_t> all_preds;
 

@@ -31,10 +31,10 @@ sns.scatterplot(
     hue='ground_truth',
     style='ground_truth',
     palette=label_palette,
-    s=25,
+    s=10,
     edgecolor='black',
-    linewidth=0.05,
-    alpha=0.7,
+    linewidth=0.001,
+    alpha=0.25,
     ax=axes[0]
 )
 axes[0].set_title("Ground Truth (Normal vs Anomaly)", fontsize=14)
@@ -51,10 +51,10 @@ sns.scatterplot(
     hue='prediction',
     style='prediction',
     palette=pred_palette,
-    s=25,
+    s=10,
     edgecolor='black',
-    linewidth=0.05,
-    alpha=0.7,
+    linewidth=0.001,
+    alpha=0.25,
     ax=axes[1]
 )
 axes[1].set_title("Predicted by Isolation Forest", fontsize=14)

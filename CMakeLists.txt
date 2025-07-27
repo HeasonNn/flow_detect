@@ -31,6 +31,7 @@ add_executable(flow_detector
     src/detector/dbscan_detector.cpp
     src/detector/iforest_detector.cpp
     src/detector/mbk_detector.cpp
+    src/detector/mix_detector.cpp
     src/algorithm/mini_batch_kmeans.cpp
     src/graph_construct/edge_constructor.cpp
     src/parser/packet_parser.cpp
