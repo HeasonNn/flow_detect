@@ -79,8 +79,8 @@ void RFDetector::run_detection(void)
 
     cout << "\n🔎 Predicting:\n";
 
-
-    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    Time start_time = to_time_point(test_flows.front().first.ts_start);
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_, start_time);
     auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
     for (const auto& pair : test_flows) {
         const FlowRecord& flow = pair.first;
@@ -154,7 +154,8 @@ void RFDetector::run(void)
     size_t count = 0;
     size_t print_interval = 1000;
 
-    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    Time start_time = to_time_point(train_flows.front().first.ts_start);
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_, start_time);
     auto flowExtractor = std::make_unique<FlowFeatureExtractor>();
 
     for (const auto &[flow, label] : train_flows)

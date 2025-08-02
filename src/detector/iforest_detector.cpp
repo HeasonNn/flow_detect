@@ -56,11 +56,11 @@ void IForestDetector::DetectByGraphFeature() {
     size_t count = 0;
     size_t print_interval = 1000;
 
-    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    Time start_time = to_time_point(train_flows.front().first.ts_start);
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_, start_time);
 
     for (const auto &[flow, label] : train_flows) {
         if(label) continue;
-        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
         graphExtractor->updateGraph(flow);
         arma::vec graphVec = graphExtractor->extract(flow);
 
@@ -91,7 +91,7 @@ void IForestDetector::DetectByGraphFeature() {
     ofs << "SrcIP,DstIP,Score,Pred,Label\n";
 
     arma::mat all_test_vecs;
-    all_test_vecs.set_size(13, test_flows.size());  // 预分配
+    all_test_vecs.set_size(20, test_flows.size());  // 预分配
     vector<size_t> all_labels;
     vector<size_t> all_preds;
 
@@ -101,7 +101,6 @@ void IForestDetector::DetectByGraphFeature() {
     size_t total_detect = test_flows.size();
 
     for (const auto& [flow, label] : test_flows) {
-        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
         graphExtractor->updateGraph(flow);
         arma::vec sample = graphExtractor->extract(flow);
 

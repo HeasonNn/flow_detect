@@ -49,131 +49,138 @@ void MixDetector::Detect(){
     size_t count = 0;
     size_t print_interval = 1000;
 
-    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    Time start_time = to_time_point(train_flows.front().first.ts_start);
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_, start_time);
+
+    // === Step 1: 提取所有特征并构建数据集 ===
+    std::vector<arma::vec> raw_samples;
+    std::vector<double> timestamps;
 
     for (const auto &[flow, label] : train_flows) {
-        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
         graphExtractor->updateGraph(flow);
         arma::vec graphVec = graphExtractor->extract(flow);
 
         if (graphVec.is_empty()) continue;
-        addSample(graphVec);
+        
+        raw_samples.push_back(graphVec);
+        timestamps.emplace_back(GET_DOUBLE_TS(flow.ts_start));
 
         if (++count % print_interval == 0 || count == total) {
-            cout << "\rProcessed " << count << " / " << total << " samples." << flush;
+            cout << "\rExtracting features... " << count << " / " << total << " samples." << flush;
         }
     }
     cout << endl; 
-    printSamples();
 
-    stream::DBSTREAM dbstream(epsilon_, lambda_, mu_, beta_merge_, beta_noise_, max_clusters_);
+    if (raw_samples.empty()) {
+        cout << "No valid samples extracted. Exiting.\n";
+        return;
+    }
 
-    arma::mat flow_data(sample_vecs_[0].n_elem, sample_vecs_.size());
-    for (size_t i = 0; i < sample_vecs_.size(); ++i)
-        flow_data.col(i) = sample_vecs_[i];
+    // === Step 2: 数据标准化 ===
+    arma::mat flow_data(raw_samples[0].n_elem, raw_samples.size());
+    for (size_t i = 0; i < raw_samples.size(); ++i)
+        flow_data.col(i) = raw_samples[i];
     
     scaler_.Fit(flow_data);
     arma::mat norm_data;
     scaler_.Transform(flow_data, norm_data);
 
-    std::vector<double> timestamps;
-    for (const auto &[flow, label] : train_flows) 
-        timestamps.emplace_back(GET_DOUBLE_TS(flow.ts_start));
-    
-    for (size_t i = 0; i < norm_data.n_cols; ++i)
+    // === Step 3: 使用修复后的 DBSTREAM 进行聚类 ===
+    // 使用我们推荐的、修复后的参数
+    stream::DBSTREAM dbstream(epsilon_, lambda_, mu_, beta_merge_, beta_noise_, max_clusters_);
+
+    size_t total_samples = norm_data.n_cols;
+    cout << "Starting DBSTREAM clustering..." << endl;
+    for (size_t i = 0; i < norm_data.n_cols; ++i) {
         dbstream.Insert(norm_data.col(i), timestamps[i]);
 
+        if (i % print_interval == 0 || i == total_samples - 1) {
+            double progress = (static_cast<double>(i + 1) / total_samples) * 100.0;
+            cout << "\rClustering progress: " << i + 1 << " / " << total_samples 
+                << " (" << std::fixed << std::setprecision(1) << progress << "%)" << flush;
+        }
+    }
+    cout << endl; // 在进度条结束后换行
     auto core_clusters = dbstream.GetClusters(timestamps.back());
-    
-    unordered_map<size_t, vector<pair<size_t, double>>> cluster_points;
-    unordered_map<size_t, double> point_to_dist;
-    unordered_map<size_t, size_t> point_to_cluster;
-    std::vector<int> assignments(norm_data.n_cols, -1);
+    cout << "DBSTREAM found " << core_clusters.size() << " core clusters.\n";
 
+    // ✅ 修复1: 使用 AllMicroClusters() 获取所有微簇，而非 GetClusters()
+    // 原因：修复后的 DBSTREAM 中，beta_noise_ 被设置得很高（如5.0），用于有效清理内存。
+    //       因此，GetClusters() 返回的只是衰减权重 >= mu_ 的簇，而许多“候选”但尚未成熟的核心簇不会被返回。
+    //       我们需要检查所有现存的微簇来判断一个点是否“被吸收”。
+    auto all_micro_clusters = dbstream.AllMicroClusters(); // 获取所有现存的微簇
+    double current_timestamp = timestamps.back();
+
+    // === Step 4: 基于 DBSTREAM 结果进行异常检测 ===
+    unordered_set<size_t> outlier_ids;
+    std::vector<int> assignments(norm_data.n_cols, -1); // -1 表示未分配（即异常）
+    std::vector<double> distances_to_cluster(norm_data.n_cols, -1.0);
+
+    // 遍历每个数据点
     for (size_t i = 0; i < norm_data.n_cols; ++i) {
         const arma::vec& pt = norm_data.col(i);
-        double best_dist = epsilon_;  // 定义 epsilon 内才归类
+        double best_dist = epsilon_; // 使用 epsilon 作为吸收半径
         int best_idx = -1;
 
-        for (size_t j = 0; j < core_clusters.size(); ++j) {
-            double dist = arma::norm(pt - core_clusters[j].center);
+        // ✅ 修复2: 遍历所有微簇，而不仅仅是“核心”簇
+        // 目标：判断点是否被任何一个微簇在 epsilon 邻域内吸收。
+        for (size_t j = 0; j < all_micro_clusters.size(); ++j) {
+            const auto& mc = all_micro_clusters[j];
+            double dist = arma::norm(pt - mc.center);
             if (dist < best_dist) {
                 best_dist = dist;
-                best_idx = j;
+                best_idx = static_cast<int>(j);
             }
         }
 
         if (best_idx >= 0) {
+            // 点被某个微簇吸收
             assignments[i] = best_idx;
-            cluster_points[best_idx].emplace_back(i, best_dist);
-            point_to_dist[i] = best_dist;
-            point_to_cluster[i] = best_idx;
+            distances_to_cluster[i] = best_dist;
+        } else {
+            // 点未被任何微簇吸收 → 直接标记为异常
+            outlier_ids.insert(i);
         }
     }
 
-    // === Step 4: 异常点检测逻辑（仿照 DBSCAN） ===
-    unordered_set<size_t> outlier_ids;
+    // === Step 5: 识别“弱”或“离散”微簇中的异常点 (可选增强) ===
+    // 这个步骤可以根据需要保留，用于处理边界情况。
+    // 但请注意，由于 beta_noise_ 设置得较高，很多“弱”簇在被识别前就已被清理。
+    // 因此，这一步的必要性降低，但可以作为二次过滤。
 
-    // === 4.1: 每个簇中最远的点 ===
-    for (const auto& [cid, points] : cluster_points) {
-        auto max_it = std::max_element(points.begin(), points.end(),
-            [](const auto& a, const auto& b) {
-                return a.second < b.second;
-            });
-        outlier_ids.insert(max_it->first);  // 最远点为异常
-    }
+    const double cluster_dispersion_threshold = 0.5; 
+    const double cluster_strength_threshold = mu_ * 1.5; 
 
-    // === 4.2: 找出最离散簇（平均距离最大）===
-    double max_avg_dist = -1.0;
-    size_t extreme_cluster = SIZE_MAX;
-    for (const auto& [cid, points] : cluster_points) {
-        double total = 0.0;
-        for (const auto& [_, dist] : points) total += dist;
-        double avg = total / points.size();
-        if (avg > max_avg_dist) {
-            max_avg_dist = avg;
-            extreme_cluster = cid;
+    for (size_t cid = 0; cid < all_micro_clusters.size(); ++cid) {
+        const auto& cluster = all_micro_clusters[cid];
+        double decayed_weight = dbstream.QueryDecayedWeight(cluster, current_timestamp);
+        
+        std::vector<std::pair<size_t, double>> points_in_cluster;
+        for (size_t i = 0; i < assignments.size(); ++i) {
+            if (assignments[i] == static_cast<int>(cid)) {
+                points_in_cluster.emplace_back(i, distances_to_cluster[i]);
+            }
         }
-    }
 
-    // === 4.3: 将最离散簇的所有点标记为异常 ===
-    if (cluster_points.count(extreme_cluster)) {
-        for (const auto& [pid, _] : cluster_points[extreme_cluster])
-            outlier_ids.insert(pid);
-    }
-
-
-    // === 4.4: 标记极端密集但小型的簇为异常 ===
-    const double dense_threshold = 0.05; // 可调：簇内平均距离小于此值
-    const size_t min_cluster_size = 10;  // 可调：点数少于此认为是异常
-
-    for (const auto& [cid, points] : cluster_points) {
-        if (points.size() > min_cluster_size) continue;
+        if (points_in_cluster.size() < 2) continue; // 至少有两个点才计算离散度
 
         double total_dist = 0.0;
-        for (const auto& [_, dist] : points) total_dist += dist;
-        double avg_dist = total_dist / points.size();
+        for (const auto& [pid, dist] : points_in_cluster) total_dist += dist;
+        double avg_dist = total_dist / points_in_cluster.size();
 
-        if (avg_dist < dense_threshold) {
-            // 这是一个小且密集的簇 → 异常
-            for (const auto& [pid, _] : points)
-                outlier_ids.insert(pid);
+        // ✅ 修复3: 调整逻辑。如果簇很弱，但点都在中心，可能没问题。
+        //          如果簇很离散，即使很强，也可能有问题。
+        //          这里我们更关注“离散度”，因为它更能反映内部的一致性。
+        if (avg_dist > cluster_dispersion_threshold) {
+            auto max_it = std::max_element(points_in_cluster.begin(), points_in_cluster.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+            // ✅ 优化: 只标记最远的1-2个点，而不是整个簇
+            outlier_ids.insert(max_it->first);
+            // 如果想更激进，可以标记距离大于 avg_dist + std_dev 的所有点
         }
     }
 
-    // === 4.5: 根据簇大小判断异常 ===
-    const size_t too_small_threshold = 5;    // 过小簇点数阈值
-    const size_t too_large_threshold = 500; // 过大簇点数阈值
-
-    for (const auto& [cid, points] : cluster_points) {
-        if (points.size() <= too_small_threshold || points.size() >= too_large_threshold) {
-            // 将该簇中的所有点标记为异常
-            for (const auto& [pid, _] : points)
-                outlier_ids.insert(pid);
-        }
-    }
-
-    // === Step 5: 评估 + 输出 ===
+    // === Step 6: 评估与输出 ===
     fs::create_directory("result");
     std::string output_file = "result/dbstream_predict_center.csv";
     std::ofstream ofs(output_file);
@@ -182,7 +189,7 @@ void MixDetector::Detect(){
     size_t TP = 0, TN = 0, FP = 0, FN = 0;
     for (size_t i = 0; i < train_flows.size(); ++i) {
         const auto& [flow, label] = train_flows[i];
-        double dist = point_to_dist.count(i) ? point_to_dist[i] : -1.0;
+        double dist = distances_to_cluster[i];
         size_t pred = outlier_ids.count(i) ? 1 : 0;
 
         if (pred == 1 && label == 1) TP++;
@@ -197,7 +204,7 @@ void MixDetector::Detect(){
     double accuracy = (double)(TP + TN) / (TP + TN + FP + FN);
     double precision = TP + FP ? (double)TP / (TP + FP) : 0.0;
     double recall = TP + FN ? (double)TP / (TP + FN) : 0.0;
-    double fpr       = (FP + TN) ? (double)FP / (FP + TN) : 0.0;
+    double fpr = (FP + TN) ? (double)FP / (FP + TN) : 0.0;
     double f1 = (precision + recall) ? 2 * precision * recall / (precision + recall) : 0.0;
 
     cout << "📊 Final Evaluation (DBSTREAM):\n";

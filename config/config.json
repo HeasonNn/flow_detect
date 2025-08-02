@@ -1,12 +1,12 @@
 {
     "data_loader": {
-        "data_type": "HyperVision",
-        "data_path": "/home/a/data/data/dns_lrscan.data",
-        "label_path": "/home/a/data/data/dns_lrscan.label",
+        "data_type": "CICIDS",
+        "data_path": "/home/a/data/TrafficLabelling/CICIDS2017.csv",
+        "label_path": "",
         "train_ratio": 0.8,
-        "data_size": 100000
+        "data_size": -1
     },
-    "algorithm": "Mix",
+    "algorithm": "Analyze",
     "detector": {
         "dbscan_config": {
             "epsilon": 0.07,
@@ -23,17 +23,18 @@
         "dbstream_config" : {
             "epsilon": 0.5,
             "lambda": 0.01,
-            "mu" : 1.0,
-            "beta_merge": 0.6,
-            "beta_noise": 0.2,
-            "max_clusters": 300
+            "mu" : 10.0,
+            "beta_merge": 8.0,
+            "beta_noise": 8.0,
+            "max_clusters": 500
         }
     },
     "extractor": {
-        "prune_interval": 50,
-        "time_window": 300,
-        "max_nodes": 5000,
-        "max_edges": 10000,
-        "simple_step": 5
+        "max_nodes": 10000,
+        "max_edges": 50000,
+        "ttl_ms": 300000,
+        "wheel_granularity_ms": 10000,
+        "wheel_slots": 50,
+        "prune_interval_ms": 10
     }
 }

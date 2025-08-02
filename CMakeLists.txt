@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # 设置编译器选项
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -fsanitize=address")
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MLPACK REQUIRED mlpack)

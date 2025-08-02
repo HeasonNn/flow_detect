@@ -86,19 +86,27 @@ void Detector::run() {
     size_t count = 0;
     size_t print_interval = 1000;
 
-    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_);
+    Time start_time = to_time_point(flows.front().first.ts_start);
+    auto graphExtractor = std::make_unique<GraphFeatureExtractor>(config_, start_time);
 
+    // size_t cnt = 0;
+    // auto old = flows.front().first.ts_start;
     for (const auto &[flow, label] : flows) {
-        graphExtractor->advance_time(GET_DOUBLE_TS(flow.ts_start));
         graphExtractor->updateGraph(flow);
         arma::vec graphVec = graphExtractor->extract(flow);
-
+        
         if (graphVec.is_empty()) continue;
         addSample(graphVec);
 
-        if (++count % print_interval == 0 || count == total) {
-            cout << "\rProcessed " << count << " / " << total << " samples." << flush;
-        }
+        // if( GET_DOUBLE_TS(flow.ts_start) != GET_DOUBLE_TS(old)) {
+        //     std::cout << std::fixed << std::setprecision(15);
+        //     std::cout << cnt << ", " << GET_DOUBLE_TS(flow.ts_start) << "\n";
+        // }
+        // cnt++;
+
+        // if (++count % print_interval == 0 || count == total) {
+        //     cout << "\rProcessed " << count << " / " << total << " samples." << flush;
+        // }
     }
     cout << endl; 
     printSamples();
