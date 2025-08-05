@@ -175,9 +175,9 @@ private:
     double epsilon_;
     double lambda_;
     double mu_;
-    double beta_merge_;
     double beta_noise_;
     double max_clusters_;
+    double eta_;
 
     double outline_threshold_;
 

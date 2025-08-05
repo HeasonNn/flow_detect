@@ -37,10 +37,6 @@ struct NodeMeta {
     Time last_seen; // 记录该节点最后一次出现的真实时间
 };
 
-using Clock = std::chrono::steady_clock;
-using Time = Clock::time_point;
-using Dur = std::chrono::milliseconds;
-
 #define TIME_NEAR_SHIFT 8
 #define TIME_NEAR (1 << TIME_NEAR_SHIFT)
 #define TIME_LEVEL_SHIFT 6
@@ -51,22 +47,19 @@ using Dur = std::chrono::milliseconds;
 template <class K>
 class TimingWheel {
 private:
-    // 任务节点
     struct TimerNode {
         K key;
-        uint32_t expire; // 过期的 tick 数
-        typename std::list<TimerNode>::iterator iter_in_list; // 用于快速取消
+        uint32_t expire;
+        typename std::list<TimerNode>::iterator iter_in_list;
     };
 
-    // 链表结构
     struct LinkList {
         std::list<TimerNode> nodes;
-        // 尾迭代器，用于 O(1) 尾插
         typename std::list<TimerNode>::iterator tail_iter;
 
-        LinkList() : tail_iter(nodes.end()) {}
+        LinkList() : tail_iter(nodes.end()) {};
 
-        void clear() {
+        void clear() noexcept {
             nodes.clear();
             tail_iter = nodes.end();
         }
@@ -76,12 +69,12 @@ private:
             tail_iter = std::prev(nodes.end());
         }
 
-        bool empty() const { return nodes.empty(); }
+        [[nodiscard]] bool empty() const noexcept { return nodes.empty(); }
     };
 
     // 主轮：TIME_NEAR 个槽
-    std::array<LinkList, TIME_NEAR> near;
     // 次轮：4 层，每层 TIME_LEVEL 个槽
+    std::array<LinkList, TIME_NEAR> near;
     std::array<std::array<LinkList, TIME_LEVEL>, 4> t;
 
     // 当前时间指针 (tick)
@@ -96,19 +89,19 @@ private:
     std::unordered_map<K, std::unique_ptr<TimerNode>> key_index;
 
     // 将 Time 转换为 tick
-    uint32_t time_to_tick(Time tp) const {
+    [[nodiscard]] uint32_t time_to_tick(Time tp) const {
         if (tp <= start_time_point) return 0;
         auto diff = std::chrono::duration_cast<Dur>(tp - start_time_point);
         return static_cast<uint32_t>(diff.count() / tick_duration.count());
     }
 
     // 将 tick 转换为 Time
-    Time tick_to_time(uint32_t tick) const {
+    [[nodiscard]] Time tick_to_time(uint32_t tick) const {
         return start_time_point + tick_duration * static_cast<int64_t>(tick);
     }
 
     // 清空链表并返回其拥有的节点
-    std::list<TimerNode> link_clear(LinkList& list) {
+    [[nodiscard]] std::list<TimerNode> link_clear(LinkList& list) {
         std::list<TimerNode> ret;
         ret.swap(list.nodes);
         list.tail_iter = ret.end();
@@ -119,22 +112,28 @@ private:
     void add_node(TimerNode* node) {
         uint32_t expire_tick = node->expire;
         uint32_t current_tick = time;
-        uint32_t msec = expire_tick - current_tick; // 剩余 tick 数
+        uint32_t remaining_ticks = expire_tick - current_tick; // 剩余的 tick 数
 
-        if (msec < TIME_NEAR) {
+        // 通过移位和掩码计算层级和槽位，避免了昂贵的除法和取模
+        if (remaining_ticks < TIME_NEAR) {
+            // 放入 near 轮
             near[expire_tick & TIME_NEAR_MASK].push_back(std::move(*node));
-        }
-        else if (msec < (1 << (TIME_NEAR_SHIFT + TIME_LEVEL_SHIFT))) {
-            t[0][(expire_tick >> TIME_NEAR_SHIFT) & TIME_LEVEL_MASK].push_back(std::move(*node));
-        }
-        else if (msec < (1 << (TIME_NEAR_SHIFT + 2 * TIME_LEVEL_SHIFT))) {
-            t[1][(expire_tick >> (TIME_NEAR_SHIFT + TIME_LEVEL_SHIFT)) & TIME_LEVEL_MASK].push_back(std::move(*node));
-        }
-        else if (msec < (1 << (TIME_NEAR_SHIFT + 3 * TIME_LEVEL_SHIFT))) {
-            t[2][(expire_tick >> (TIME_NEAR_SHIFT + 2 * TIME_LEVEL_SHIFT)) & TIME_LEVEL_MASK].push_back(std::move(*node));
-        }
+        } 
         else {
-            t[3][(expire_tick >> (TIME_NEAR_SHIFT + 3 * TIME_LEVEL_SHIFT)) & TIME_LEVEL_MASK].push_back(std::move(*node));
+            // 计算需要多少个 level_shift
+            // 从 t[0] 开始检查
+            uint32_t shift = TIME_NEAR_SHIFT;
+            for (int level = 0; level < 4; ++level) {
+                // 计算该层级的掩码
+                uint32_t level_mask = (1U << (shift + TIME_LEVEL_SHIFT)) - 1;
+                if (remaining_ticks < level_mask) {
+                    t[level][(expire_tick >> shift) & TIME_LEVEL_MASK].push_back(std::move(*node));
+                    return;
+                }
+                shift += TIME_LEVEL_SHIFT;
+            }
+            // 如果剩余时间太长，放入最外层 t[3]
+            t[3][(expire_tick >> shift) & TIME_LEVEL_MASK].push_back(std::move(*node));
         }
     }
 
@@ -184,37 +183,21 @@ private:
     }
 
 public:
-    // 保持你原有的接口
-    explicit TimingWheel(Dur tick_duration, size_t slots, Time start_time)
-        : tick_duration(tick_duration), start_time_point(start_time), time(0) {
+    explicit TimingWheel(Dur tick_duration, Time start_time)
+        : tick_duration(tick_duration), start_time_point(start_time), time(0) 
+    {
         if (tick_duration.count() <= 0) {
             throw std::invalid_argument("tick_duration must be positive");
-        }
-        if (slots != TIME_NEAR) {
-            // 为了与 time1.md 一致，slots 必须为 TIME_NEAR
-            // 你可以选择忽略此参数，或抛出异常
-            // 这里我们忽略，使用固定的 TIME_NEAR
-        }
-        // 初始化所有链表
-        for (auto& slot : near) {
-            slot.clear();
-        }
-        for (auto& level : t) {
-            for (auto& slot : level) {
-                slot.clear();
-            }
         }
     }
 
     ~TimingWheel() {
         try {
             clear([](const K&){});
-        } catch (...) {
-            // 析构函数不应抛出异常
-        }
+        } 
+        catch (...) {}
     }
 
-    // 保持你原有的接口
     void insert(const K& key, Time expire_time) {
         uint32_t expire_tick = time_to_tick(expire_time);
 
@@ -232,16 +215,13 @@ public:
         key_index[key] = std::move(node);
     }
 
-    // 保持你原有的接口
-    bool cancel(const K& key) {
+    [[nodiscard]] bool cancel(const K& key) {
         return key_index.erase(key) > 0; // unique_ptr 自动释放
     }
 
-    // 保持你原有的接口
     void advance(Time now, std::function<void(const K&)> on_expire) {
         uint32_t now_tick = time_to_tick(now);
 
-        // 推进时间，处理每一个 tick
         while (time < now_tick) {
             timer_execute(on_expire);  // 执行当前 tick 的任务
             timer_shift();             // 推进 tick 并处理重新映射
@@ -249,13 +229,11 @@ public:
         }
     }
 
-    // 保持你原有的接口
     void clear(std::function<void(const K&)> on_expire) {
         advance(tick_to_time(time + 1000000), on_expire);
-        key_index.clear(); // ✅ unique_ptr 自动释放所有节点
+        key_index.clear();
     }
 
-    // 以下为调试和监控函数，保持你原有的接口
     void print_levels() const {
         std::cout << "Level near: slots=" << TIME_NEAR << ", span=" 
                   << (TIME_NEAR * tick_duration.count()) << "ms (" 
@@ -291,7 +269,7 @@ public:
         std::vector<size_t> keys_per_level;
     };
 
-    Stats get_stats() const {
+    [[nodiscard]] Stats get_stats() const {
         Stats stats;
         stats.total_keys = key_index.size();
         for (int i = 0; i < TIME_NEAR; ++i) {
@@ -332,13 +310,10 @@ private:
 
 public:
     // 构造函数
-    GraphMaintainer(size_t /* max_nodes */, size_t /* max_edges */, 
-        Dur ttl, Dur wheel_granularity, size_t wheel_slots, 
-        Dur prune_interval, Time start_time)
+    GraphMaintainer(Dur ttl, Dur wheel_granularity, Time start_time)
         : ttl_(ttl), 
-          edge_wheel_(wheel_granularity, wheel_slots, start_time),
-          node_wheel_(wheel_granularity, wheel_slots, start_time),
-          prune_interval_(prune_interval),
+          edge_wheel_(wheel_granularity, start_time),
+          node_wheel_(wheel_granularity, start_time),
           last_prune_time_(Time()) {}
 
     // 析构函数
@@ -396,7 +371,7 @@ public:
         nm_src.last_seen = nm_dst.last_seen = ts_start;
 
         // 计算过期时间
-        Time expire_time = ts_end;
+        Time expire_time = ts_end + ttl_;
 
         // 将 key 和 expire_time 插入时间轮
         edge_wheel_.insert(edge_key, expire_time);
@@ -411,8 +386,8 @@ public:
         // if (last_prune_time_ == Time() || (now - last_prune_time_) >= prune_interval_) 
         {
             // 推进边的时间轮
-            edge_wheel_.print_slot_sizes("[edge_wheel] Before Advance");
-            node_wheel_.print_slot_sizes("[node_wheel] Before Advance");
+            // edge_wheel_.print_slot_sizes("[edge_wheel] Before Advance");
+            // node_wheel_.print_slot_sizes("[node_wheel] Before Advance");
             
             // === 1. 先收集过期 key ===
             std::vector<std::pair<uint32_t, uint32_t>> expired_edges;
@@ -447,8 +422,8 @@ public:
                 }
             }
 
-            edge_wheel_.print_slot_sizes("[edge_wheel] After Advance");
-            node_wheel_.print_slot_sizes("[node_wheel] After Advance");
+            // edge_wheel_.print_slot_sizes("[edge_wheel] After Advance");
+            // node_wheel_.print_slot_sizes("[node_wheel] After Advance");
 
             last_prune_time_ = now;
         }

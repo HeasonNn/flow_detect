@@ -7,23 +7,17 @@ GraphFeatureExtractor::GraphFeatureExtractor(const json& cfg, Time start_time)
     : cfg_(cfg), last_prune_ts_(start_time)
 {
     const auto& extractor_config = cfg_["extractor"];
-    const auto max_nodes = extractor_config.value("max_nodes", 5000);
-    const auto max_edges = extractor_config.value("max_edges", 10000);
     const auto ttl = extractor_config.value("ttl_ms", 30000);
     const auto wheel_granularity = extractor_config.value("wheel_granularity_ms", 1000);
-    const auto wheel_slots = extractor_config.value("wheel_slots", 30);
     const auto prune_interval = cfg.value("prune_interval", 1000);
 
     prune_interval_ = Dur(prune_interval);
 
-    g_ = std::make_unique<GraphMaintainer>(max_nodes, max_edges, Dur(ttl), Dur(wheel_granularity), wheel_slots, prune_interval_, start_time);
+    g_ = std::make_unique<GraphMaintainer>(Dur(ttl), Dur(wheel_granularity), start_time);
 
     std::cout << "GraphFeatureExtractor initialized.\n"
-              << "  max_nodes: "         << max_nodes << "\n"
-              << "  max_edges: "         << max_edges << "\n"
               << "  ttl: "               << ttl << "ms\n"
               << "  wheel_granularity: " << wheel_granularity << "ms\n"
-              << "  wheel_slots: "       << wheel_slots << "\n"
               << "  prune_interval: "    << prune_interval << "ms\n"
               << std::flush;
 }
@@ -33,11 +27,11 @@ void GraphFeatureExtractor::maybe_prune(Time now) {
     auto interval = (now - last_prune_ts_).count();
     // std::cout << "Intelval: " << interval << "  prune_interval_: " << prune_interval_.count() << "\n";
     if (now - last_prune_ts_ > prune_interval_) {
-        std::cout << "exec g_->prune(now);" << "\n";
+        // std::cout << "exec g_->prune(now);" << "\n";
         g_->prune(now);
         last_prune_ts_ = now; // 更新为流时间
         
-        std::cout << "[Graph Stats] Active Nodes: " << g_->active_nodes() << " | Active Edges: " << g_->active_edges() << "\n";
+        // std::cout << "[Graph Stats] Active Nodes: " << g_->active_nodes() << " | Active Edges: " << g_->active_edges() << "\n";
     }
 }
 
