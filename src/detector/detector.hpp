@@ -9,6 +9,8 @@
 #include <mlpack/methods/pca/pca.hpp>
 
 #include "../algorithm/mini_batch_kmeans.hpp"
+#include "../algorithm/bloomfilter.hpp"
+#include "../feature/subgraph_agg.hpp"
 #include "../feature/flow_feature.hpp"
 #include "../feature/graph_features.hpp"
 #include "../dataloader/data_loader.hpp"
@@ -130,9 +132,9 @@ public:
         min_points_        = dbscan_config_.value("min_points", 10);
         outline_threshold_ = dbscan_config_.value("outline_threshold", 0.65);
 
-        cout << "epsilon_: "           << epsilon_ << ", "
-             << "minPoints_: "         << min_points_ << ", "
-             << "outline_threshold_: " << outline_threshold_ << "\n";
+        std::cout << "epsilon_: "           << epsilon_ << ", "
+                  << "minPoints_: "         << min_points_ << ", "
+                  << "outline_threshold_: " << outline_threshold_ << "\n";
     };
 
     void run(void) override;
@@ -162,6 +164,34 @@ public:
 };
 
 
+struct DetectionMetrics {
+    size_t TP = 0, TN = 0, FP = 0, FN = 0;
+    double accuracy = 0, precision = 0, recall = 0, f1 = 0, fpr = 0;
+};
+
+struct PartitionData {
+    int pid = -1;
+    size_t load = 0;
+
+    // Partition Analyze, KL vs background
+    arma::vec signature;
+    double kl_bw=0, kl_pps=0, kl_pkt=0, kl_rar=0, kl_scn=0, kl_proto=0;
+    double score = 0.0;
+
+    std::unique_ptr<BloomFilter> bloom_filter;
+    std::unique_ptr<GraphFeatureExtractor> extractor;
+    std::unique_ptr<SubgraphProfiler> profiler;
+
+    // 缓存
+    std::shared_ptr<std::vector<arma::vec>> sample_vec;
+    std::unique_ptr<arma::mat> norm_data;
+    std::unique_ptr<std::vector<size_t>> idx_vec;
+
+    // DBSTREAM result
+    std::unique_ptr<std::vector<size_t>> assignments;
+    std::unique_ptr<std::unordered_set<size_t>> outlier;
+};
+
 class MixDetector : public Detector{
 private:
     int random_seed_;
@@ -178,12 +208,17 @@ private:
     double beta_noise_;
     double max_clusters_;
     double eta_;
+    double connection_threshold_;
+
+    std::shared_ptr<std::vector<std::pair<FlowRecord, size_t>>> flows_;
 
     double outline_threshold_;
-
     mlpack::data::MinMaxScaler scaler_;
 public:
     explicit MixDetector(shared_ptr<DataLoader> loader, const json& config);
+
+    void execDBstreamDetect(const PartitionData& pt);
+    void execPCAProccess(const PartitionData& pt);
 
     void Train();
     void Detect();
@@ -191,5 +226,5 @@ public:
 };
 
 
-shared_ptr<Detector> createDetector(const json& config_j);
-string get_current_time_str(void);
+std::shared_ptr<Detector> createDetector(const json& config_j);
+std::string get_current_time_str(void);

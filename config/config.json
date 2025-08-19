@@ -1,10 +1,10 @@
 {
     "data_loader": {
-        "data_type": "CICIDS",
-        "data_path": "/home/a/data/TrafficLabelling/Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
-        "label_path": "",
+        "data_type": "HyperVision",
+        "data_path": "/home/a/data/data/udpsdos.data",
+        "label_path": "/home/a/data/data/udpsdos.label",
         "train_ratio": 0.8,
-        "data_size": 100000
+        "data_size": -1
     },
     "algorithm": "Mix",
     "detector": {
@@ -21,17 +21,18 @@
             "outline_threshold": 0.5
         },
         "dbstream_config": {
-            "epsilon": 0.45,
-            "lambda": 0.0001,
-            "mu": 5,
-            "beta_noise": 0.5,
+            "epsilon": 0.4,
+            "lambda": 0.01,
+            "mu": 5.0,
+            "beta_noise": 0.15,
             "max_clusters": 1000,
-            "eta": 0.1
+            "eta": 0.15,
+            "connection_threshold": 0.005
         }
     },
     "extractor": {
         "ttl_ms": 0,
-        "wheel_granularity_ms": 10000,
-        "prune_interval_ms": 10
+        "wheel_granularity_ms": 5,
+        "prune_interval_ms": 20
     }
 }

@@ -71,6 +71,38 @@ struct MCLinkValue {
 
 // ================= DBSTREAM 主类 =================
 class DBSTREAM {
+private:
+    double epsilon_, lambda_, mu_, beta_noise_, eta_;
+    size_t max_clusters_;
+    double last_seen_ts_;
+    size_t dim_;
+    size_t insert_counter_ = 0;
+
+    std::vector<std::shared_ptr<MicroCluster>> clusters_;
+    std::unordered_map<MCLinkKey, MCLinkValue> adj_;
+
+    void RemoveNoise(double ts) {
+        auto end = std::remove_if(clusters_.begin(), clusters_.end(),
+            [&](const std::shared_ptr<MicroCluster>& mc) {
+                if (mc->getDecayedWeight(lambda_, ts) < beta_noise_) {
+                    RemoveEdgesFor(mc.get());
+                    return true;
+                }
+                return false;
+            });
+        clusters_.erase(end, clusters_.end());
+    }
+
+    void RemoveEdgesFor(const MicroCluster* mc) {
+        std::vector<MCLinkKey> to_remove;
+        for (const auto& [key, _] : adj_) {
+            if (key.a == mc || key.b == mc)
+                to_remove.push_back(key);
+        }
+        for (const auto& key : to_remove)
+            adj_.erase(key);
+    }
+
 public:
     explicit DBSTREAM(double epsilon, double lambda, double mu, double beta_noise, size_t max_clusters, double eta = 0.1)
         : epsilon_(epsilon), 
@@ -151,7 +183,7 @@ public:
             }
         }
 
-        // Step 3: 定期清理弱簇和弱边（比如每隔20步清理一次）
+        // Step 3: 定期清理弱簇和弱边（比如每隔100步清理一次）
         if (++insert_counter_ % 100 == 0) RemoveNoise(ts);
 
         last_seen_ts_ = ts;
@@ -175,19 +207,23 @@ public:
         // 2. 并查集Union-Find找连通分量
         std::map<const MicroCluster*, const MicroCluster*> parent;
         for (const auto& mc : core_mcs) parent[mc] = mc;
+
         auto find = [&](const MicroCluster* x) {
             while (x != parent[x]) x = parent[x];
             return x;
         };
+
         auto unite = [&](const MicroCluster* x, const MicroCluster* y) {
             parent[find(x)] = find(y);
         };
+
         for (const auto& [key, val] : adj_) {
             if (val.connection >= connection_threshold &&
                 parent.count(key.a) && parent.count(key.b)) {
                 unite(key.a, key.b);
             }
         }
+
         // 3. 分配label
         std::map<const MicroCluster*, int> cluster_label;
         int next_label = 0;
@@ -196,6 +232,7 @@ public:
             if (!cluster_label.count(root))
                 cluster_label[root] = next_label++;
         }
+        
         std::map<const MicroCluster*, int> result;
         for (const auto& mc : core_mcs)
             result[mc] = cluster_label[find(mc)];
@@ -233,37 +270,5 @@ public:
         last_seen_ts_ = 0.0;
         dim_ = 0;
         insert_counter_ = 0;
-    }
-
-private:
-    double epsilon_, lambda_, mu_, beta_noise_, eta_;
-    size_t max_clusters_;
-    double last_seen_ts_;
-    size_t dim_;
-    size_t insert_counter_ = 0;
-
-    std::vector<std::shared_ptr<MicroCluster>> clusters_;
-    std::unordered_map<MCLinkKey, MCLinkValue> adj_;
-
-    void RemoveNoise(double ts) {
-        auto end = std::remove_if(clusters_.begin(), clusters_.end(),
-            [&](const std::shared_ptr<MicroCluster>& mc) {
-                if (mc->getDecayedWeight(lambda_, ts) < beta_noise_) {
-                    RemoveEdgesFor(mc.get());
-                    return true;
-                }
-                return false;
-            });
-        clusters_.erase(end, clusters_.end());
-    }
-
-    void RemoveEdgesFor(const MicroCluster* mc) {
-        std::vector<MCLinkKey> to_remove;
-        for (const auto& [key, _] : adj_) {
-            if (key.a == mc || key.b == mc)
-                to_remove.push_back(key);
-        }
-        for (const auto& key : to_remove)
-            adj_.erase(key);
     }
 };

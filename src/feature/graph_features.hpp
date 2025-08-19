@@ -11,7 +11,7 @@
 #include "../common.hpp"
 #include "flow_feature.hpp"
 
-using Clock = std::chrono::steady_clock;
+using Clock = std::chrono::system_clock;
 using Time = Clock::time_point;
 using Dur = std::chrono::milliseconds;
 
@@ -191,13 +191,6 @@ public:
         }
     }
 
-    ~TimingWheel() {
-        try {
-            clear([](const K&){});
-        } 
-        catch (...) {}
-    }
-
     void insert(const K& key, Time expire_time) {
         uint32_t expire_tick = time_to_tick(expire_time);
 
@@ -305,53 +298,15 @@ private:
     // 最后一次推进时间轮的时间
     Time last_prune_time_;
 
-    // 保护共享数据的互斥锁
-    mutable std::mutex mutex_;
-
 public:
     // 构造函数
     GraphMaintainer(Dur ttl, Dur wheel_granularity, Time start_time)
         : ttl_(ttl), 
           edge_wheel_(wheel_granularity, start_time),
           node_wheel_(wheel_granularity, start_time),
-          last_prune_time_(Time()) {}
-
-    // 析构函数
-    ~GraphMaintainer() {
-        std::vector<std::pair<uint32_t, uint32_t>> expired_edges;
-        std::vector<uint32_t> expired_nodes;
-
-        edge_wheel_.clear([&](const auto& edge_key) {
-            expired_edges.push_back(edge_key);
-        });
-
-        node_wheel_.clear([&](uint32_t ip) {
-            expired_nodes.push_back(ip);
-        });
-
-        for (const auto& edge_key : expired_edges) {
-            auto map_it = edge_map_.find(edge_key);
-            if (map_it != edge_map_.end()) {
-                handle_edge_removal(edge_key, map_it->second);
-                edge_map_.erase(map_it);
-            }
-        }
-
-        for (uint32_t ip : expired_nodes) {
-            auto map_it = node_map_.find(ip);
-            if (map_it != node_map_.end()) {
-                const auto& meta = map_it->second;
-                if (meta.in_deg == 0 && meta.out_deg == 0) {
-                    handle_node_removal(ip, meta);
-                    node_map_.erase(map_it);
-                }
-            }
-        }
-    }
+          last_prune_time_(Time()) {};
 
     void update(uint32_t src, uint32_t dst, Time ts_start, Time ts_end) {
-        std::lock_guard<std::mutex> lock(mutex_);
-
         auto edge_key = std::make_pair(src, dst);
         auto& em = edge_map_[edge_key];
         const bool fresh_edge = (em.count == 0);
@@ -381,8 +336,6 @@ public:
 
     // prune 函数：使用流时间推进时间轮
     void prune(Time now) {
-        std::lock_guard<std::mutex> lock(mutex_);
-
         // if (last_prune_time_ == Time() || (now - last_prune_time_) >= prune_interval_) 
         {
             // 推进边的时间轮
@@ -430,7 +383,6 @@ public:
     }
 
     const NodeMeta* node(uint32_t ip, Time now) const {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto it = node_map_.find(ip);
         if (it != node_map_.end()) {
             // 检查是否过期
@@ -442,7 +394,6 @@ public:
     }
 
     const EdgeMeta* edge(uint32_t s, uint32_t d, Time now) const {
-        std::lock_guard<std::mutex> lock(mutex_);
         auto key = std::make_pair(s, d);
         auto it = edge_map_.find(key);
         if (it != edge_map_.end()) {
@@ -454,13 +405,19 @@ public:
     }
 
     size_t active_nodes() const {
-        std::lock_guard<std::mutex> lock(mutex_);
         return node_map_.size();
     }
 
     size_t active_edges() const {
-        std::lock_guard<std::mutex> lock(mutex_);
         return edge_map_.size();
+    }
+
+    void print(){
+        edge_wheel_.print_levels();
+        edge_wheel_.print_slot_sizes();
+
+        node_wheel_.print_levels();
+        node_wheel_.print_slot_sizes();
     }
 
 private:
@@ -525,6 +482,11 @@ public:
     void updateGraph(const FlowRecord& f);
     arma::vec extract(const FlowRecord& f) const;
 
+    const NodeMeta* getNode(uint32_t ip, Time now) {return g_->node(ip, now);};
+
+    void print(){
+        g_->print();
+    }
 private:
     const json& cfg_;
 

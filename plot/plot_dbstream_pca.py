@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # 读取数据
-df = pd.read_csv("build/result/dbstream_pca_result.csv")
+df = pd.read_csv("build/result/dbstream_pca_pid_1.csv")
 
 # 类型转换
-df['assignments'] = df['assignments'].astype(int)
+df['assignment'] = df['assignments'].astype(int)
 df['label'] = df['label'].astype(int)
 df['is_outlier'] = df['is_outlier'].astype(bool)
 
@@ -20,8 +20,8 @@ fig, axes = plt.subplots(1, 3, figsize=(21, 6))
 # ========= 图 1: DBSTREAM 聚类结果 =========
 assignments_palette = {
     cid: color for cid, color in zip(
-        sorted(df['assignments'].unique()),
-        sns.color_palette("hsv", len(df['assignments'].unique()))
+        sorted(df['assignment'].unique()),
+        sns.color_palette("hsv", len(df['assignment'].unique()))
     )
 }
 assignments_palette[-1] = "gray"
@@ -30,8 +30,8 @@ sns.scatterplot(
     data=df,
     x='x',
     y='y',
-    hue='assignments',
-    style='assignments',
+    hue='assignment',
+    style='assignment',
     palette=assignments_palette,
     s=15,
     edgecolor='none',

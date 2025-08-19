@@ -15,11 +15,11 @@ GraphFeatureExtractor::GraphFeatureExtractor(const json& cfg, Time start_time)
 
     g_ = std::make_unique<GraphMaintainer>(Dur(ttl), Dur(wheel_granularity), start_time);
 
-    std::cout << "GraphFeatureExtractor initialized.\n"
-              << "  ttl: "               << ttl << "ms\n"
-              << "  wheel_granularity: " << wheel_granularity << "ms\n"
-              << "  prune_interval: "    << prune_interval << "ms\n"
-              << std::flush;
+    // std::cout << "GraphFeatureExtractor initialized.\n"
+    //           << "  ttl: "               << ttl << "ms\n"
+    //           << "  wheel_granularity: " << wheel_granularity << "ms\n"
+    //           << "  prune_interval: "    << prune_interval << "ms\n"
+    //           << std::flush;
 }
 
 void GraphFeatureExtractor::maybe_prune(Time now) {
