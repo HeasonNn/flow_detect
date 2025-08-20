@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # 读取数据
-df = pd.read_csv("build/result/dbstream_pca_pid_1.csv")
+df = pd.read_csv("build/result/dbstream_pca_pid_6.csv")
 
 # 类型转换
 df['assignment'] = df['assignments'].astype(int)

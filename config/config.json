@@ -1,8 +1,8 @@
 {
     "data_loader": {
         "data_type": "HyperVision",
-        "data_path": "/home/a/data/data/udpsdos.data",
-        "label_path": "/home/a/data/data/udpsdos.label",
+        "data_path": "/home/a/data/data/crossfirela.data",
+        "label_path": "/home/a/data/data/crossfirela.label",
         "train_ratio": 0.8,
         "data_size": -1
     },
